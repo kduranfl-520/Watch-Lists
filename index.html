@@ -1,0 +1,488 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="icon" type="image/svg+xml" href="icon.svg">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Watch Lists">
+<title>Watch Lists</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&display=swap">
+<style>
+/* Layout: one narrow column, sticky progress header, phase sections of tappable rows. Films = solid tag, series = outlined tag. */
+:root {
+  --bg: #f2f3f7;
+  --surface: #ffffff;
+  --ink: #14161f;
+  --muted: #5d6275;
+  --line: #dcdfe8;
+  --accent: #c4202e;
+  --accent-ink: #ffffff;
+  --done: #8a8fa3;
+  --font-display: "Barlow Condensed", "Arial Narrow", sans-serif;
+  --font-body: "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f111a; --surface: #181b27; --ink: #eceef6; --muted: #9aa0b5; --line: #292d3d;
+    --accent: #ef4a58; --accent-ink: #14161f; --done: #6b7088; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f111a; --surface: #181b27; --ink: #eceef6; --muted: #9aa0b5; --line: #292d3d;
+  --accent: #ef4a58; --accent-ink: #14161f; --done: #6b7088; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 16px; line-height: 1.4;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0 48px;
+}
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+.wrap { max-width: 640px; margin: 0 auto; }
+header.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); padding: 10px 0 8px; border-bottom: 1px solid var(--line); }
+h1 { font-family: var(--font-display); font-weight: 700; font-size: 2rem; letter-spacing: .01em; line-height: 1; margin: 0; text-wrap: balance; }
+.sub { color: var(--muted); font-size: .88rem; margin: 12px 0 0; }
+.vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.pick { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+#listsel { flex: 1; min-width: 0; font: inherit; font-family: var(--font-display); font-weight: 700; font-size: 1.25rem; letter-spacing: .01em; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 6px 8px; }
+.seg { display: flex; gap: 6px; flex: none; }
+.meter { display: flex; align-items: center; gap: 12px; }
+.bar { flex: 1; height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; }
+.bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .25s ease; }
+.count { font-variant-numeric: tabular-nums; font-weight: 600; font-size: .9rem; white-space: nowrap; }
+.filters { display: flex; flex-wrap: nowrap; gap: 6px; margin-top: 8px; overflow-x: auto; scrollbar-width: none; }
+.filters::-webkit-scrollbar { display: none; }
+.filters .chip, .seg .chip { white-space: nowrap; flex: none; }
+.chip { font: inherit; font-size: .85rem; font-weight: 500; color: var(--ink); background: transparent; border: 1px solid var(--line); border-radius: 999px; padding: 5px 11px; cursor: pointer; }
+.chip[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.chip:focus-visible, .row:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+.sep { width: 1px; background: var(--line); margin: 2px 2px; }
+section { margin-top: 28px; }
+section h2 { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-family: var(--font-display); font-weight: 700; font-size: 1.25rem; letter-spacing: .06em; text-transform: uppercase; margin: 0 0 8px; }
+section h2 small { font-family: var(--font-body); font-size: .8rem; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--muted); font-variant-numeric: tabular-nums; }
+.list { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.row { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; align-items: center; column-gap: 12px; padding: 12px 14px; border-top: 1px solid var(--line); cursor: pointer; }
+.list > :first-child { border-top: 0; }
+.row input { position: absolute; opacity: 0; pointer-events: none; }
+.box { width: 22px; height: 22px; border: 2px solid var(--muted); border-radius: 6px; display: grid; place-items: center; }
+.row input:checked + .box { background: var(--accent); border-color: var(--accent); }
+.row input:checked + .box::after { content: ""; width: 6px; height: 11px; border: solid var(--accent-ink); border-width: 0 2.5px 2.5px 0; transform: rotate(45deg) translate(-1px, -1px); }
+.row input:disabled + .box { border-style: dashed; opacity: .6; }
+.row.upcoming { cursor: default; }
+.name { min-width: 0; }
+.title { font-weight: 600; overflow-wrap: anywhere; }
+.row input:checked ~ .name .title { color: var(--done); text-decoration: line-through; text-decoration-thickness: 1px; }
+.meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-top: 3px; font-size: .78rem; color: var(--muted); }
+.tag { font-family: var(--font-display); font-weight: 700; font-size: .75rem; letter-spacing: .08em; text-transform: uppercase; padding: 1px 6px; border-radius: 3px; border: 1.5px solid var(--ink); }
+.tag.film { background: var(--ink); color: var(--bg); }
+.net { font-size: .75rem; font-weight: 600; color: var(--muted); letter-spacing: .02em; }
+.tag.cross { border-color: var(--accent); color: var(--accent); }
+.tag.opt { border-color: var(--line); color: var(--muted); font-weight: 600; }
+.date { font-size: .82rem; color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.next { font-family: var(--font-display); font-weight: 700; font-size: .75rem; letter-spacing: .08em; text-transform: uppercase; color: var(--accent-ink); background: var(--accent); padding: 1px 6px; border-radius: 3px; }
+.soon { color: var(--accent); font-weight: 600; }
+.empty { padding: 16px 14px; color: var(--muted); font-size: .9rem; }
+.foot { margin-top: 32px; color: var(--muted); font-size: .82rem; }
+.foot p { margin: 0 0 8px; }
+
+.blk { border-top: 1px solid var(--line); }
+.sum { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; align-items: center; column-gap: 12px; padding: 12px 14px; cursor: pointer; list-style: none; }
+.sum::-webkit-details-marker { display: none; }
+.sum:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.sbox { width: 22px; height: 22px; border: 2px solid var(--muted); border-radius: 6px; display: grid; place-items: center; }
+.sbox.part::after { content: ""; width: 10px; height: 2.5px; background: var(--accent); }
+.sbox.full { background: var(--accent); border-color: var(--accent); }
+.sbox.full::after { content: ""; width: 6px; height: 11px; border: solid var(--accent-ink); border-width: 0 2.5px 2.5px 0; transform: rotate(45deg) translate(-1px, -1px); }
+.sum.all .title { color: var(--done); text-decoration: line-through; text-decoration-thickness: 1px; }
+.chev { display: inline-block; width: 8px; height: 8px; border: solid var(--muted); border-width: 0 2px 2px 0; transform: rotate(45deg); margin-left: 8px; vertical-align: 2px; transition: transform .15s; }
+details[open] > .sum .chev { transform: rotate(-135deg); vertical-align: -2px; }
+.eps { background: var(--bg); border-top: 1px solid var(--line); padding: 8px 0 10px; }
+.eplist { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
+.ep { display: flex; align-items: center; gap: 10px; padding: 8px 14px 8px 20px; cursor: pointer; font-size: .92rem; }
+.ep input { position: absolute; opacity: 0; pointer-events: none; }
+.box.sm { width: 18px; height: 18px; border-radius: 5px; flex: none; }
+.ep input:checked + .box { background: var(--accent); border-color: var(--accent); }
+.ep input:checked + .box::after { content: ""; width: 5px; height: 9px; border: solid var(--accent-ink); border-width: 0 2px 2px 0; transform: rotate(45deg) translate(-1px, -1px); }
+.ep input:checked ~ span { color: var(--done); }
+.ep input:focus-visible + .box { outline: 2px solid var(--accent); outline-offset: 2px; }
+.epbar { display: flex; gap: 8px; padding: 6px 14px 0 20px; }
+.mini { font: inherit; font-size: .8rem; font-weight: 500; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; cursor: pointer; }
+@media (prefers-reduced-motion: reduce) { .bar i, .chev { transition: none; } }
+</style>
+<style>
+:root { color-scheme: light; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+body { margin: 0; }
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+
+
+<div class="wrap">
+  <header class="top">
+    <h1 class="vh">Watch Lists</h1>
+    <div class="pick">
+      <select id="listsel" aria-label="Watch list"></select>
+      <div class="seg" id="views">
+        <button class="chip" data-v="release" aria-pressed="false">Release</button>
+        <button class="chip" data-v="story" aria-pressed="true">Story</button>
+      </div>
+    </div>
+    <div class="meter">
+      <div class="bar" role="progressbar" aria-label="Watched" aria-valuemin="0" aria-valuemax="100" id="pbar"><i id="fill"></i></div>
+      <div class="count" id="count">0 / 0</div>
+    </div>
+    <div class="filters" id="filters">
+      <button class="chip" data-f="all" aria-pressed="true">All</button>
+      <button class="chip" id="chip-film" data-f="film" aria-pressed="false">Films</button>
+      <button class="chip" data-f="series" aria-pressed="false">Series</button>
+      <button class="chip" data-f="todo" aria-pressed="false">Unwatched</button>
+      <span class="sep" aria-hidden="true"></span>
+      <button class="chip" id="core" aria-pressed="false">Skip optional</button>
+      <button class="chip" id="legacy" aria-pressed="true" hidden>ABC &amp; Netflix shows</button>
+    </div>
+  </header>
+  <p class="sub" id="sub"></p>
+  <main id="main"></main>
+  <div class="foot" id="foot-marvel">
+    <p>Tap a series to open its episodes, or tap its square to mark the whole season. Optional means you can skip it and still follow the main story. Dates are US premieres; Spider-Man titles are Sony co-productions.</p>
+    <p>The Sony films (Venom, Venom: Let There Be Carnage, Morbius, Madame Web, Venom: The Last Dance and Kraven the Hunter) are optional and tagged Sony. In story order I put Venom and Let There Be Carnage right before Spider-Man: No Way Home, since that film's mid-credits scene leads into it, and Morbius right after. The other three are not connected to the MCU story, so they sit in the standalone group.</p>
+    <p>Story order follows when events happen in the MCU. Sources disagree on a few placements (Echo, the What If...? seasons, Eyes of Wakanda), so treat it as approximate. Titles set in other universes, plus I Am Groot, are grouped at the end. Dates are release dates; for episode ranges that is the season premiere.</p>
+    <p>The ABC, Netflix, Hulu and Freeform shows follow a fan-maintained episode order, with Agents of S.H.I.E.L.D. split around the films it references. Other guides split S.H.I.E.L.D. season 4 differently, and I placed Jessica Jones season 3 myself because the source skips it. Marvel One-Shots and Helstrom are left out.</p>
+    <p>Still on the way: Your Friendly Neighborhood Spider-Man season 2 (reported for January 2027), Daredevil: Born Again season 3 (March 2027) and Avengers: Secret Wars (December 2027).</p>
+  </div>
+  <div class="foot" id="foot-arrow" hidden>
+    <p>Episodes are interleaved by air date, with each crossover placed where its parts belong. Dates for episode ranges are the season premiere. Constantine, Vixen and Freedom Fighters: The Ray are optional. Constantine sits at the end of Year 3, since it aired in 2014–15 and its character first appears in Arrow season 4.</p>
+    <p>Superman &amp; Lois season 1 is included because of a storyline that touches Arrow's Diggle, though the show is not officially part of the Arrowverse. Its later seasons, Stargirl and Naomi are left out.</p>
+    <p>The order comes from a fan-maintained guide. I corrected two small gaps in it: The Flash season 3 now runs episodes 9–12 before 13–16, and Legends of Tomorrow season 5 runs through episode 15. Episode 0 of Legends of Tomorrow season 5 is the fifth part of Crisis on Infinite Earths.</p>
+  </div>
+  <div class="foot" id="foot-buffy" hidden>
+    <p>Buffy seasons 1–3 come first. From Buffy season 4 the two shows alternate, with a few runs grouped where the story needs them (for example Hush and Doomed together). Angel season 5 comes last because Buffy has ended by then.</p>
+    <p>This follows a fan-recommended order. Dates for episode ranges are the season premiere. The 1992 film is optional. The comics follow Angel season 5 in canon reading order, with Buffy and Angel &amp; Faith issues alternating in seasons 9 and 10; their dates show the year, and Fray and the Tales stories are optional. For season 11, my sources disagree on where Angel Season 11 goes, and I used the order that puts it between Buffy season 11 issues 6 and 7.</p>
+  </div>
+  <div class="foot" id="foot-trek" hidden>
+    <p>Release order puts every series season and film in premiere order, so shows that overlapped, such as The Next Generation, Deep Space Nine and Voyager, interleave season by season. Chronological order follows in-universe dates; the 24th-century block stays in release order because those shows and films overlap in time.</p>
+    <p>The Kelvin films are a separate timeline, and Short Treks can be watched anywhere. The Animated Series and Section 31 are marked optional. Order is by season, not by crossover episode.</p>
+    <p>Strange New Worlds season 4 finished in September 2026. Starfleet Academy season 2, its last, is expected in 2027, so it is listed but cannot be ticked yet. Dates for seasons are premiere dates.</p>
+  </div>
+  <div class="foot" id="foot-swars" hidden>
+    <p>Release order puts every film and series season in premiere order by decade. The Clone Wars is split into short runs of episodes so the same ticks work in both views. Chronological order follows in-universe dates; the Clone Wars runs follow Lucasfilm's own chronological episode list, with the 2008 film after “Hidden Enemy”.</p>
+    <p>Revenge of the Sith sits after Clone Wars season 7 episode 4, before the Siege of Mandalore episodes, as one popular guide suggests. Where Andor and Rebels overlap, the alternation by season is my judgment, as are the Tales anthologies and Maul – Shadow Lord sitting before Solo. Visions is a non-canon anthology and optional.</p>
+    <p>Ahsoka season 2 is set for January 2027, so it is listed but cannot be ticked yet. Dates for seasons are premiere dates.</p>
+  </div>
+  <div class="foot" id="foot-xmen" hidden>
+    <p>Story order goes by in-story year and ignores flashbacks, which is the order most guides use. Deadpool &amp; Wolverine is shared with the Marvel list, so ticking it in one ticks it in the other. The films disagree with each other on details, so story order is best treated as a guide.</p>
+  </div>
+  <div class="foot" id="foot-dc" hidden>
+    <p>The DCEU is the older film universe that ended in 2023. Joker, The Batman and The Penguin are separate Elseworlds stories. Peacemaker season 1 sits in the DCEU and season 2 follows Superman in the new DCU. Zack Snyder's Justice League is optional, so watch it in place of the 2017 cut or in addition to it. Man of Tomorrow is listed but cannot be ticked yet.</p>
+    <p>Gotham is its own world, and Titans and Doom Patrol share a world with each other, so all three are optional extras. Titans and Doom Patrol are interleaved by air date and the seasons are not split further. Their dates show the year only.</p>
+  </div>
+  <div class="foot" id="foot-stargate" hidden>
+    <p>This follows the shape of GateWorld's optimized order: the film, SG-1 seasons 1–7, then SG-1 season 8 and Atlantis season 1 together. After that the shows alternate, and the fixed points are the Ark of Truth after the SG-1 finale and Continuum after the first Atlantis season 5 episode. The five-episode blocks between those points are my approximation. Stargate Infinity is left out because it is not canon, and Origins is optional.</p>
+  </div>
+  <div class="foot" id="foot-bsg" hidden>
+    <p>This follows Slashfilm's order, which puts Razor inside season 2, The Resistance before season 3, The Face of the Enemy inside season 4 and The Plan near the end. Caprica and Blood &amp; Chrome are prequels that many fans watch last, so they are optional and first only because that guide lists them first. Episode counts for the webisodes and Caprica are from memory.</p>
+  </div>
+  <div class="foot" id="foot-dwho" hidden>
+    <p>This is the modern series from 2005 in air-date order, with Torchwood and The Sarah Jane Adventures where they aired, since the crossovers rely on that. Class is optional, and the classic series (1963–1989) is left out. Series 7 is split into the 2012 and 2013 runs. The War Between the Land and the Sea is listed as an optional miniseries and its episode count is not tracked. No new episodes are scheduled right now.</p>
+  </div>
+</div>
+
+<script>
+// [title, type (f=film, s=series), ISO date, optional]
+var PHASES = [
+  ["Phase One", [
+    ["Iron Man","f","2008-05-02"],["The Incredible Hulk","f","2008-06-13"],["Iron Man 2","f","2010-05-07"],
+    ["Thor","f","2011-05-06"],["Captain America: The First Avenger","f","2011-07-22"],["The Avengers","f","2012-05-04"]]],
+  ["Phase Two", [
+    ["Iron Man 3","f","2013-05-03"],["Thor: The Dark World","f","2013-11-08"],["Captain America: The Winter Soldier","f","2014-04-04"],
+    ["Guardians of the Galaxy","f","2014-08-01"],["Avengers: Age of Ultron","f","2015-05-01"],["Ant-Man","f","2015-07-17"]]],
+  ["Phase Three", [
+    ["Captain America: Civil War","f","2016-05-06"],["Doctor Strange","f","2016-11-04"],["Guardians of the Galaxy Vol. 2","f","2017-05-05"],
+    ["Spider-Man: Homecoming","f","2017-07-07"],["Thor: Ragnarok","f","2017-11-03"],["Black Panther","f","2018-02-16"],
+    ["Avengers: Infinity War","f","2018-04-27"],["Ant-Man and the Wasp","f","2018-07-06"],["Venom","f","2018-10-05",1],["Captain Marvel","f","2019-03-08"],
+    ["Avengers: Endgame","f","2019-04-26"],["Spider-Man: Far From Home","f","2019-07-02"]]],
+  ["Phase Four", [
+    ["WandaVision","s","2021-01-15"],["The Falcon and the Winter Soldier","s","2021-03-19"],["Loki, season 1","s","2021-06-09"],
+    ["Black Widow","f","2021-07-09"],["What If...?, season 1","s","2021-08-11",1],["Shang-Chi and the Legend of the Ten Rings","f","2021-09-03"],
+    ["Venom: Let There Be Carnage","f","2021-10-01",1],["Eternals","f","2021-11-05"],["Hawkeye","s","2021-11-24"],["Spider-Man: No Way Home","f","2021-12-17"],
+    ["Moon Knight","s","2022-03-30"],["Morbius","f","2022-04-01",1],["Doctor Strange in the Multiverse of Madness","f","2022-05-06"],["Ms. Marvel","s","2022-06-08"],
+    ["Thor: Love and Thunder","f","2022-07-08"],["I Am Groot","s","2022-08-10",1],["She-Hulk: Attorney at Law","s","2022-08-18"],
+    ["Werewolf by Night","s","2022-10-07",1],["Black Panther: Wakanda Forever","f","2022-11-11"],["The Guardians of the Galaxy Holiday Special","s","2022-11-25",1]]],
+  ["Phase Five", [
+    ["Ant-Man and the Wasp: Quantumania","f","2023-02-17"],["Guardians of the Galaxy Vol. 3","f","2023-05-05"],["Secret Invasion","s","2023-06-21"],
+    ["Loki, season 2","s","2023-10-06"],["The Marvels","f","2023-11-10"],["What If...?, season 2","s","2023-12-22",1],
+    ["Echo","s","2024-01-09"],["Madame Web","f","2024-02-14",1],["X-Men '97, season 1","s","2024-03-20"],["Deadpool & Wolverine","f","2024-07-26"],
+    ["Agatha All Along","s","2024-09-18"],["Venom: The Last Dance","f","2024-10-25",1],["Kraven the Hunter","f","2024-12-13",1],["What If...?, season 3","s","2024-12-26",1],["Your Friendly Neighborhood Spider-Man, season 1","s","2025-01-29",1],
+    ["Captain America: Brave New World","f","2025-02-14"],["Daredevil: Born Again, season 1","s","2025-03-04"],["Thunderbolts*","f","2025-05-02"]]],
+  ["Phase Six", [
+    ["Ironheart","s","2025-06-24"],["The Fantastic Four: First Steps","f","2025-07-25"],["Eyes of Wakanda","s","2025-08-27",1],
+    ["Marvel Zombies","s","2025-09-24",1],["Wonder Man","s","2026-01-27"],["Daredevil: Born Again, season 2","s","2026-03-24"],
+    ["The Punisher: One Last Kill","s","2026-05-13"],["X-Men '97, season 2","s","2026-07-01"],["Spider-Man: Brand New Day","f","2026-07-31"],
+    ["VisionQuest","s","2026-10-14"],["Avengers: Doomsday","f","2026-12-18"]]]
+];
+var MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+var KEY = "mcu-watch-list-v1";
+var done = {};
+try { done = JSON.parse(localStorage.getItem(KEY) || "{}") || {}; } catch (e) { done = {}; }
+function save() { try { localStorage.setItem(KEY, JSON.stringify(done)); } catch (e) {} }
+
+var now = new Date(); var today = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-" + String(now.getDate()).padStart(2, "0");
+var filter = "all", skipOpt = false;
+var items = [];
+PHASES.forEach(function (p, pi) { p[1].forEach(function (it) {
+  items.push({ id: it[0], type: it[1], date: it[2], opt: !!it[3], phase: pi, upcoming: it[2] > today });
+}); });
+
+function fmt(d, upcoming) {
+  if (d.length === 4) return d;
+  var y = d.slice(0, 4), m = +d.slice(5, 7) - 1, day = +d.slice(8, 10);
+  return upcoming ? MON[m] + " " + day + ", " + y : MON[m] + " " + y;
+}
+function visible(it) {
+  if (filter === "film" && it.type !== "f") return false;
+  if (filter === "series" && it.type !== "s") return false;
+  if (filter === "todo" && isDone(it)) return false;
+  if (skipOpt && it.opt) return false;
+  return true;
+}
+function esc(s) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;"); }
+
+var view = "story";
+var legacyOn = true;
+var LEGACY = [["Agent Carter, season 1", "2015-01-06", "ABC"], ["Agent Carter, season 2", "2016-01-19", "ABC"], ["Agents of S.H.I.E.L.D., S1 eps 1–7", "2013-09-24", "ABC"], ["Agents of S.H.I.E.L.D., S1 eps 8–16", "2013-09-24", "ABC"], ["Agents of S.H.I.E.L.D., S1 eps 17–22", "2013-09-24", "ABC"], ["Daredevil, season 1", "2015-04-10", "Netflix"], ["Agents of S.H.I.E.L.D., S2 eps 1–10", "2014-09-23", "ABC"], ["Jessica Jones, season 1", "2015-11-20", "Netflix"], ["Agents of S.H.I.E.L.D., S2 eps 11–19", "2014-09-23", "ABC"], ["Agents of S.H.I.E.L.D., S2 eps 20–22", "2014-09-23", "ABC"], ["Daredevil, S2 eps 1–4", "2016-03-18", "Netflix"], ["Luke Cage, S1 eps 1–4", "2016-09-30", "Netflix"], ["Daredevil, S2 eps 5–11", "2016-03-18", "Netflix"], ["Luke Cage, S1 eps 5–8", "2016-09-30", "Netflix"], ["Daredevil, S2 eps 12–13", "2016-03-18", "Netflix"], ["Luke Cage, S1 eps 9–13", "2016-09-30", "Netflix"], ["Agents of S.H.I.E.L.D., S3 eps 1–19", "2015-09-29", "ABC"], ["Iron Fist, season 1", "2017-03-17", "Netflix"], ["Agents of S.H.I.E.L.D., S3 eps 20–22", "2015-09-29", "ABC"], ["The Defenders", "2017-08-18", "Netflix"], ["Agents of S.H.I.E.L.D., S4 eps 1–6", "2016-09-20", "ABC"], ["Agents of S.H.I.E.L.D., S4 eps 7–22", "2016-09-20", "ABC"], ["Inhumans", "2017-09-29", "ABC"], ["The Punisher, season 1", "2017-11-17", "Netflix"], ["Runaways, season 1", "2017-11-21", "Hulu"], ["Agents of S.H.I.E.L.D., S5 eps 1–10", "2017-12-01", "ABC"], ["Jessica Jones, season 2", "2018-03-08", "Netflix"], ["Agents of S.H.I.E.L.D., S5 eps 11–18", "2017-12-01", "ABC"], ["Cloak & Dagger, season 1", "2018-06-07", "Freeform"], ["Cloak & Dagger, season 2", "2019-04-04", "Freeform"], ["Luke Cage, season 2", "2018-06-22", "Netflix"], ["Iron Fist, season 2", "2018-09-07", "Netflix"], ["Daredevil, season 3", "2018-10-19", "Netflix"], ["Runaways, season 2", "2018-12-21", "Hulu"], ["The Punisher, season 2", "2019-01-18", "Netflix"], ["Jessica Jones, season 3", "2019-06-14", "Netflix"], ["Agents of S.H.I.E.L.D., S5 eps 19–22", "2017-12-01", "ABC"], ["Agents of S.H.I.E.L.D., season 6", "2019-05-10", "ABC"], ["Agents of S.H.I.E.L.D., season 7", "2020-06-03", "ABC"], ["Runaways, season 3", "2019-12-13", "Hulu"]];
+LEGACY.forEach(function (l) { items.push({ id: l[0], type: "s", date: l[1], opt: false, phase: -1, upcoming: false, net: l[2] }); });
+var STORY = [
+  ["Infinity Saga", ["Eyes of Wakanda", "Captain America: The First Avenger", "Agent Carter, season 1", "Agent Carter, season 2", "Captain Marvel", "Iron Man", "Iron Man 2", "The Incredible Hulk", "Thor", "The Avengers", "Iron Man 3", "Agents of S.H.I.E.L.D., S1 eps 1–7", "Thor: The Dark World", "Agents of S.H.I.E.L.D., S1 eps 8–16", "Captain America: The Winter Soldier", "Agents of S.H.I.E.L.D., S1 eps 17–22", "Guardians of the Galaxy", "Guardians of the Galaxy Vol. 2", "Daredevil, season 1", "Agents of S.H.I.E.L.D., S2 eps 1–10", "Jessica Jones, season 1", "Agents of S.H.I.E.L.D., S2 eps 11–19", "Avengers: Age of Ultron", "Agents of S.H.I.E.L.D., S2 eps 20–22", "Daredevil, S2 eps 1–4", "Luke Cage, S1 eps 1–4", "Daredevil, S2 eps 5–11", "Luke Cage, S1 eps 5–8", "Daredevil, S2 eps 12–13", "Luke Cage, S1 eps 9–13", "Ant-Man", "Agents of S.H.I.E.L.D., S3 eps 1–19", "Iron Fist, season 1", "Captain America: Civil War", "Black Widow", "Agents of S.H.I.E.L.D., S3 eps 20–22", "The Defenders", "Agents of S.H.I.E.L.D., S4 eps 1–6", "Black Panther", "Doctor Strange", "Agents of S.H.I.E.L.D., S4 eps 7–22", "Spider-Man: Homecoming", "Thor: Ragnarok", "Inhumans", "The Punisher, season 1", "Runaways, season 1", "Agents of S.H.I.E.L.D., S5 eps 1–10", "Jessica Jones, season 2", "Agents of S.H.I.E.L.D., S5 eps 11–18", "Cloak & Dagger, season 1", "Cloak & Dagger, season 2", "Luke Cage, season 2", "Iron Fist, season 2", "Daredevil, season 3", "Runaways, season 2", "The Punisher, season 2", "Jessica Jones, season 3", "Ant-Man and the Wasp", "Agents of S.H.I.E.L.D., S5 eps 19–22", "Avengers: Infinity War", "Agents of S.H.I.E.L.D., season 6", "Agents of S.H.I.E.L.D., season 7", "Avengers: Endgame"]],
+  ["Multiverse Saga", ["Runaways, season 3", "Loki, season 1", "What If...?, season 1", "What If...?, season 2", "What If...?, season 3", "WandaVision", "The Falcon and the Winter Soldier", "Spider-Man: Far From Home", "Venom", "Venom: Let There Be Carnage", "Spider-Man: No Way Home", "Morbius", "Shang-Chi and the Legend of the Ten Rings", "Eternals", "Hawkeye", "Moon Knight", "Ms. Marvel", "Doctor Strange in the Multiverse of Madness", "Thor: Love and Thunder", "Black Panther: Wakanda Forever", "She-Hulk: Attorney at Law", "Werewolf by Night", "The Guardians of the Galaxy Holiday Special", "Guardians of the Galaxy Vol. 3", "Ant-Man and the Wasp: Quantumania", "Secret Invasion", "Loki, season 2", "The Marvels", "Echo", "Deadpool & Wolverine", "Agatha All Along", "Captain America: Brave New World", "Daredevil: Born Again, season 1", "Thunderbolts*", "Ironheart", "Wonder Man", "Daredevil: Born Again, season 2", "The Punisher: One Last Kill", "VisionQuest", "Spider-Man: Brand New Day", "Avengers: Doomsday"]],
+  ["Other universes and standalone", ["The Fantastic Four: First Steps", "X-Men '97, season 1", "X-Men '97, season 2", "Your Friendly Neighborhood Spider-Man, season 1", "Marvel Zombies", "I Am Groot", "Madame Web", "Venom: The Last Dance", "Kraven the Hunter"]]
+];
+var ARROW = [["Year 1 · 2012–13", [["Arrow, S1 eps 1–23", "2012-10-10", false, false]]], ["Year 2 · 2013–14", [["Arrow, S2 eps 1–23", "2013-10-09", false, false]]], ["Year 3 · 2014–15", [["Arrow, S3 eps 1–3", "2014-10-08", false, false], ["The Flash, S1 eps 1–4", "2014-10-07", false, false], ["Arrow, S3 ep 4", "2014-10-08", false, false], ["The Flash, S1 ep 5", "2014-10-07", false, false], ["Arrow, S3 ep 5", "2014-10-08", false, false], ["The Flash, S1 eps 6–7", "2014-10-07", false, false], ["Arrow, S3 eps 6–7", "2014-10-08", false, false], ["The Flash, S1 E8: Flash vs. Arrow, part 1", "2014-12-02", false, true], ["Arrow, S3 E8: The Brave and the Bold, part 2", "2014-12-03", false, true], ["The Flash, S1 eps 9–17", "2014-10-07", false, false], ["Arrow, S3 eps 9–21", "2014-10-08", false, false], ["The Flash, S1 eps 18–23", "2014-10-07", false, false], ["Arrow, S3 eps 22–23", "2014-10-08", false, false], ["Constantine, season 1", "2014-10-24", true, false], ["Vixen, season 1 (animated)", "2015-08-25", true, false], ["Vixen, season 2 (animated)", "2016-02-02", true, false]]], ["Year 4 · 2015–16", [["Arrow, S4 ep 1", "2015-10-07", false, false], ["The Flash, S2 eps 1–4", "2015-10-06", false, false], ["Arrow, S4 eps 2–4", "2015-10-07", false, false], ["Supergirl, S1 eps 1–4", "2015-10-26", false, false], ["Arrow, S4 ep 5", "2015-10-07", false, false], ["The Flash, S2 eps 5–6", "2015-10-06", false, false], ["Supergirl, S1 eps 5–7", "2015-10-26", false, false], ["Arrow, S4 ep 6", "2015-10-07", false, false], ["The Flash, S2 ep 7", "2015-10-06", false, false], ["Supergirl, S1 eps 8–9", "2015-10-26", false, false], ["Arrow, S4 ep 7", "2015-10-07", false, false], ["The Flash, S2 E8: Legends of Today, part 1", "2015-12-01", false, true], ["Arrow, S4 E8: Legends of Yesterday, part 2", "2015-12-02", false, true], ["Arrow, S4 eps 9–10", "2015-10-07", false, false], ["The Flash, S2 eps 9–10", "2015-10-06", false, false], ["Legends of Tomorrow, S1 eps 1–3", "2016-01-21", false, false], ["Supergirl, S1 eps 10–11", "2015-10-26", false, false], ["The Flash, S2 eps 11–14", "2015-10-06", false, false], ["Arrow, S4 eps 11–15", "2015-10-07", false, false], ["Legends of Tomorrow, S1 eps 4–7", "2016-01-21", false, false], ["Supergirl, S1 eps 12–14", "2015-10-26", false, false], ["The Flash, S2 eps 15–17", "2015-10-06", false, false], ["Supergirl, S1 eps 15–17", "2015-10-26", false, false], ["Supergirl, S1 E18: Worlds Finest", "2016-03-28", false, true], ["The Flash, S2 E18: Versus Zoom", "2016-03-29", false, false], ["Legends of Tomorrow, S1 eps 8–11", "2016-01-21", false, false], ["Arrow, S4 eps 16–19", "2015-10-07", false, false], ["The Flash, S2 eps 19–21", "2015-10-06", false, false], ["Supergirl, S1 eps 19–20", "2015-10-26", false, false], ["The Flash, S2 ep 22", "2015-10-06", false, false], ["Arrow, S4 eps 20–22", "2015-10-07", false, false], ["Legends of Tomorrow, S1 eps 12–16", "2016-01-21", false, false], ["The Flash, S2 ep 23", "2015-10-06", false, false], ["Arrow, S4 ep 23", "2015-10-07", false, false]]], ["Year 5 · 2016–17", [["The Flash, S3 eps 1–2", "2016-10-04", false, false], ["Arrow, S5 eps 1–2", "2016-10-05", false, false], ["Supergirl, S2 eps 1–2", "2016-10-10", false, false], ["Legends of Tomorrow, S2 eps 1–2", "2016-10-13", false, false], ["Supergirl, S2 eps 3–7", "2016-10-10", false, false], ["The Flash, S3 eps 3–7", "2016-10-04", false, false], ["Arrow, S5 eps 3–7", "2016-10-05", false, false], ["Legends of Tomorrow, S2 eps 3–6", "2016-10-13", false, false], ["Supergirl, S2 E8: Medusa, Invasion! prelude", "2016-11-28", false, true], ["The Flash, S3 E8: Invasion!, part 1", "2016-11-29", false, true], ["Arrow, S5 E8: Invasion!, part 2", "2016-11-30", false, true], ["Legends of Tomorrow, S2 E7: Invasion!, part 3", "2016-12-01", false, true], ["Supergirl, S2 eps 9–12", "2016-10-10", false, false], ["The Flash, S3 eps 9–12", "2016-10-04", false, false], ["Arrow, S5 eps 9–12", "2016-10-05", false, false], ["Legends of Tomorrow, S2 eps 8–11", "2016-10-13", false, false], ["Supergirl, S2 eps 13–15", "2016-10-10", false, false], ["The Flash, S3 eps 13–16", "2016-10-04", false, false], ["Supergirl, S2 E16: Star-Crossed, Duet prelude", "2017-03-20", false, true], ["The Flash, S3 E17: Duet", "2017-03-21", false, true], ["Arrow, S5 eps 13–16", "2016-10-05", false, false], ["Legends of Tomorrow, S2 eps 12–17", "2016-10-13", false, false], ["Supergirl, S2 eps 17–20", "2016-10-10", false, false], ["The Flash, S3 eps 18–21", "2016-10-04", false, false], ["Arrow, S5 eps 17–21", "2016-10-05", false, false], ["Supergirl, S2 eps 21–22", "2016-10-10", false, false], ["The Flash, S3 eps 22–23", "2016-10-04", false, false], ["Arrow, S5 eps 22–23", "2016-10-05", false, false]]], ["Year 6 · 2017–18", [["Supergirl, S3 eps 1–4", "2017-10-09", false, false], ["The Flash, S4 eps 1–4", "2017-10-10", false, false], ["Arrow, S6 eps 1–4", "2017-10-12", false, false], ["Legends of Tomorrow, S3 eps 1–4", "2017-10-10", false, false], ["Supergirl, S3 eps 5–7", "2017-10-09", false, false], ["The Flash, S4 eps 5–7", "2017-10-10", false, false], ["Arrow, S6 eps 5–7", "2017-10-12", false, false], ["Legends of Tomorrow, S3 eps 5–7", "2017-10-10", false, false], ["Supergirl, S3 E8: Crisis on Earth-X, part 1", "2017-11-27", false, true], ["Arrow, S6 E8: Crisis on Earth-X, part 2", "2017-11-28", false, true], ["The Flash, S4 E8: Crisis on Earth-X, part 3", "2017-11-29", false, true], ["Legends of Tomorrow, S3 E8: Crisis on Earth-X, part 4", "2017-11-30", false, true], ["Freedom Fighters: The Ray (animated)", "2017-11-28", true, false], ["The Flash, S4 eps 9–11", "2017-10-10", false, false], ["Arrow, S6 eps 9–11", "2017-10-12", false, false], ["Supergirl, S3 eps 9–11", "2017-10-09", false, false], ["Legends of Tomorrow, S3 eps 9–10", "2017-10-10", false, false], ["Black Lightning, S1 eps 1–5", "2018-01-16", false, false], ["The Flash, S4 eps 12–15", "2017-10-10", false, false], ["Arrow, S6 eps 12–15", "2017-10-12", false, false], ["Legends of Tomorrow, S3 eps 11–14", "2017-10-10", false, false], ["Supergirl, S3 eps 12–13", "2017-10-09", false, false], ["Black Lightning, S1 eps 6–9", "2018-01-16", false, false], ["Legends of Tomorrow, S3 eps 15–18", "2017-10-10", false, false], ["Black Lightning, S1 eps 10–13", "2018-01-16", false, false], ["The Flash, S4 eps 16–23", "2017-10-10", false, false], ["Arrow, S6 eps 16–23", "2017-10-12", false, false], ["Supergirl, S3 eps 14–23", "2017-10-09", false, false]]], ["Year 7 · 2018–19", [["The Flash, S5 eps 1–3", "2018-10-09", false, false], ["Arrow, S7 eps 1–3", "2018-10-15", false, false], ["Supergirl, S4 eps 1–3", "2018-10-14", false, false], ["Legends of Tomorrow, S4 eps 1–3", "2018-10-22", false, false], ["Black Lightning, S2 eps 1–3", "2018-10-09", false, false], ["The Flash, S5 eps 4–8", "2018-10-09", false, false], ["Arrow, S7 eps 4–8", "2018-10-15", false, false], ["Supergirl, S4 eps 4–8", "2018-10-14", false, false], ["Legends of Tomorrow, S4 eps 4–7", "2018-10-22", false, false], ["Black Lightning, S2 eps 4–7", "2018-10-09", false, false], ["The Flash, S5 E9: Elseworlds, part 1", "2018-12-09", false, true], ["Arrow, S7 E9: Elseworlds, part 2", "2018-12-10", false, true], ["Supergirl, S4 E9: Elseworlds, part 3", "2018-12-11", false, true], ["Black Lightning, S2 eps 8–10", "2018-10-09", false, false], ["Legends of Tomorrow, S4 ep 8", "2018-10-22", false, false], ["The Flash, S5 eps 10–13", "2018-10-09", false, false], ["Arrow, S7 eps 10–13", "2018-10-15", false, false], ["Supergirl, S4 eps 10–13", "2018-10-14", false, false], ["Black Lightning, S2 eps 11–16", "2018-10-09", false, false], ["Legends of Tomorrow, S4 eps 9–16", "2018-10-22", false, false], ["The Flash, S5 eps 14–22", "2018-10-09", false, false], ["Arrow, S7 eps 14–22", "2018-10-15", false, false], ["Supergirl, S4 eps 14–22", "2018-10-14", false, false]]], ["Year 8 · 2019–20", [["Batwoman, S1 eps 1–4", "2019-10-06", false, false], ["Supergirl, S5 eps 1–4", "2019-10-06", false, false], ["The Flash, S6 eps 1–4", "2019-10-08", false, false], ["Arrow, S8 eps 1–3", "2019-10-15", false, false], ["Black Lightning, S3 eps 1–4", "2019-10-07", false, false], ["Batwoman, S1 eps 5–8", "2019-10-06", false, false], ["Supergirl, S5 eps 5–8", "2019-10-06", false, false], ["The Flash, S6 eps 5–8", "2019-10-08", false, false], ["Arrow, S8 eps 4–7", "2019-10-15", false, false], ["Black Lightning, S3 eps 5–7", "2019-10-07", false, false], ["Black Lightning, S3 E8: Crisis on Infinite Earths prelude", "2019-12-02", false, true], ["Supergirl, S5 E9: Crisis on Infinite Earths, part 1", "2019-12-08", false, true], ["Batwoman, S1 E9: Crisis on Infinite Earths, part 2", "2019-12-09", false, true], ["The Flash, S6 E9: Crisis on Infinite Earths, part 3", "2019-12-10", false, true], ["Arrow, S8 E8: Crisis on Infinite Earths, part 4", "2020-01-14", false, true], ["Legends of Tomorrow, S5 E0: Crisis on Infinite Earths, part 5", "2020-01-14", false, true], ["Arrow, S8 eps 9–10", "2019-10-15", false, false], ["Black Lightning, S3 eps 9–13", "2019-10-07", false, false], ["Legends of Tomorrow, S5 eps 1–4", "2020-01-21", false, false], ["Supergirl, S5 eps 10–14", "2019-10-06", false, false], ["Batwoman, S1 eps 10–14", "2019-10-06", false, false], ["The Flash, S6 eps 10–14", "2019-10-08", false, false], ["Black Lightning, S3 eps 14–16", "2019-10-07", false, false], ["Legends of Tomorrow, S5 eps 5–15", "2020-01-21", false, false], ["Supergirl, S5 eps 15–19", "2019-10-06", false, false], ["Batwoman, S1 eps 15–20", "2019-10-06", false, false], ["The Flash, S6 eps 15–19", "2019-10-08", false, false]]], ["Year 9 · 2020–21", [["The Flash, S7 eps 1–3", "2021-03-02", false, false], ["Batwoman, S2 eps 1–4", "2021-01-17", false, false], ["Black Lightning, S4 eps 1–4", "2021-02-08", false, false], ["Superman & Lois, S1 eps 1–5", "2021-02-23", true, false], ["The Flash, S7 eps 4–11", "2021-03-02", false, false], ["Supergirl, S6 eps 1–7", "2021-03-30", false, false], ["Batwoman, S2 eps 5–12", "2021-01-17", false, false], ["Legends of Tomorrow, S6 eps 1–6", "2021-05-02", false, false], ["Black Lightning, S4 eps 5–13", "2021-02-08", false, false], ["Batwoman, S2 eps 13–16", "2021-01-17", false, false], ["The Flash, S7 eps 12–16", "2021-03-02", false, false], ["Superman & Lois, S1 eps 6–12", "2021-02-23", true, false], ["Supergirl, S6 eps 8–12", "2021-03-30", false, false], ["Batwoman, S2 eps 17–18", "2021-01-17", false, false], ["Legends of Tomorrow, S6 eps 7–11", "2021-05-02", false, false], ["The Flash, S7 eps 17–18", "2021-03-02", false, false], ["Superman & Lois, S1 eps 13–15", "2021-02-23", true, false], ["Legends of Tomorrow, S6 eps 12–15", "2021-05-02", false, false], ["Supergirl, S6 eps 13–20", "2021-03-30", false, false]]], ["Year 10 · 2021–22", [["Batwoman, S3 eps 1–7", "2021-10-13", false, false], ["Armageddon (The Flash, S8 eps 1–5)", "2021-11-14", false, true], ["Batwoman, S3 eps 8–13", "2021-10-13", false, false], ["Legends of Tomorrow, S7 eps 1–13", "2021-10-04", false, false], ["The Flash, S8 eps 6–20", "2021-11-14", false, false]]], ["Year 11 · 2023", [["The Flash, S9 eps 1–13", "2023-02-08", false, false]]]];
+var ARROWG = [];
+ARROW.forEach(function (g) {
+  var ids = [];
+  g[1].forEach(function (a) { items.push({ id: a[0], type: "s", date: a[1], opt: !!a[2], cross: !!a[3], phase: -1, upcoming: false, list: "arrow" }); ids.push(a[0]); });
+  ARROWG.push([g[0], ids]);
+});
+var BUFFY = [["Buffy seasons 1–3", [["Buffy the Vampire Slayer (1992 film)", "1992-07-31", true, "f"], ["Buffy, S1 eps 1–12", "1997-03-10", false, "s"], ["Buffy, S2 eps 1–22", "1997-09-15", false, "s"], ["Buffy, S3 eps 1–22", "1998-09-29", false, "s"]]], ["Buffy 4 and Angel 1", [["Buffy, S4 ep 1", "1999-10-05", false, "s"], ["Angel, S1 ep 1", "1999-10-05", false, "s"], ["Buffy, S4 ep 2", "1999-10-05", false, "s"], ["Angel, S1 ep 2", "1999-10-05", false, "s"], ["Buffy, S4 ep 3", "1999-10-05", false, "s"], ["Angel, S1 ep 3", "1999-10-05", false, "s"], ["Buffy, S4 ep 4", "1999-10-05", false, "s"], ["Angel, S1 ep 4", "1999-10-05", false, "s"], ["Buffy, S4 ep 5", "1999-10-05", false, "s"], ["Angel, S1 ep 5", "1999-10-05", false, "s"], ["Buffy, S4 ep 6", "1999-10-05", false, "s"], ["Angel, S1 ep 6", "1999-10-05", false, "s"], ["Buffy, S4 ep 7", "1999-10-05", false, "s"], ["Angel, S1 ep 7", "1999-10-05", false, "s"], ["Buffy, S4 ep 8", "1999-10-05", false, "s"], ["Angel, S1 ep 8", "1999-10-05", false, "s"], ["Buffy, S4 ep 9", "1999-10-05", false, "s"], ["Angel, S1 ep 9", "1999-10-05", false, "s"], ["Buffy, S4 eps 10–11", "1999-10-05", false, "s"], ["Angel, S1 eps 10–11", "1999-10-05", false, "s"], ["Buffy, S4 ep 12", "1999-10-05", false, "s"], ["Angel, S1 eps 12–13", "1999-10-05", false, "s"], ["Buffy, S4 eps 13–14", "1999-10-05", false, "s"], ["Angel, S1 eps 14–15", "1999-10-05", false, "s"], ["Buffy, S4 eps 15–16", "1999-10-05", false, "s"], ["Angel, S1 ep 16", "1999-10-05", false, "s"], ["Buffy, S4 ep 17", "1999-10-05", false, "s"], ["Angel, S1 ep 17", "1999-10-05", false, "s"], ["Buffy, S4 eps 18–19", "1999-10-05", false, "s"], ["Angel, S1 eps 18–19", "1999-10-05", false, "s"], ["Buffy, S4 ep 20", "1999-10-05", false, "s"], ["Angel, S1 eps 20–21", "1999-10-05", false, "s"], ["Buffy, S4 eps 21–22", "1999-10-05", false, "s"], ["Angel, S1 ep 22", "1999-10-05", false, "s"]]], ["Buffy 5 and Angel 2", [["Angel, S2 ep 1", "2000-09-26", false, "s"], ["Buffy, S5 ep 1", "2000-09-26", false, "s"], ["Angel, S2 ep 2", "2000-09-26", false, "s"], ["Buffy, S5 ep 2", "2000-09-26", false, "s"], ["Angel, S2 ep 3", "2000-09-26", false, "s"], ["Buffy, S5 ep 3", "2000-09-26", false, "s"], ["Angel, S2 ep 4", "2000-09-26", false, "s"], ["Buffy, S5 ep 4", "2000-09-26", false, "s"], ["Angel, S2 ep 5", "2000-09-26", false, "s"], ["Buffy, S5 ep 5", "2000-09-26", false, "s"], ["Angel, S2 ep 6", "2000-09-26", false, "s"], ["Buffy, S5 ep 6", "2000-09-26", false, "s"], ["Angel, S2 ep 7", "2000-09-26", false, "s"], ["Buffy, S5 ep 7", "2000-09-26", false, "s"], ["Angel, S2 ep 8", "2000-09-26", false, "s"], ["Buffy, S5 ep 8", "2000-09-26", false, "s"], ["Angel, S2 ep 9", "2000-09-26", false, "s"], ["Buffy, S5 ep 9", "2000-09-26", false, "s"], ["Angel, S2 ep 10", "2000-09-26", false, "s"], ["Buffy, S5 ep 10", "2000-09-26", false, "s"], ["Angel, S2 ep 11", "2000-09-26", false, "s"], ["Buffy, S5 ep 11", "2000-09-26", false, "s"], ["Angel, S2 ep 12", "2000-09-26", false, "s"], ["Buffy, S5 ep 12", "2000-09-26", false, "s"], ["Angel, S2 ep 13", "2000-09-26", false, "s"], ["Buffy, S5 ep 13", "2000-09-26", false, "s"], ["Angel, S2 eps 14–16", "2000-09-26", false, "s"], ["Buffy, S5 ep 14", "2000-09-26", false, "s"], ["Angel, S2 ep 17", "2000-09-26", false, "s"], ["Buffy, S5 eps 15–17", "2000-09-26", false, "s"], ["Angel, S2 ep 18", "2000-09-26", false, "s"], ["Buffy, S5 ep 18", "2000-09-26", false, "s"], ["Angel, S2 ep 19", "2000-09-26", false, "s"], ["Buffy, S5 eps 19–22", "2000-09-26", false, "s"], ["Angel, S2 eps 20–22", "2000-09-26", false, "s"]]], ["Buffy 6 and Angel 3", [["Angel, S3 ep 1", "2001-09-24", false, "s"], ["Buffy, S6 eps 1–2", "2001-10-02", false, "s"], ["Angel, S3 ep 2", "2001-09-24", false, "s"], ["Buffy, S6 ep 3", "2001-10-02", false, "s"], ["Angel, S3 eps 3–4", "2001-09-24", false, "s"], ["Buffy, S6 ep 4", "2001-10-02", false, "s"], ["Angel, S3 ep 5", "2001-09-24", false, "s"], ["Buffy, S6 ep 5", "2001-10-02", false, "s"], ["Angel, S3 ep 6", "2001-09-24", false, "s"], ["Buffy, S6 ep 6", "2001-10-02", false, "s"], ["Angel, S3 ep 7", "2001-09-24", false, "s"], ["Buffy, S6 eps 7–8", "2001-10-02", false, "s"], ["Angel, S3 eps 8–9", "2001-09-24", false, "s"], ["Buffy, S6 eps 9–10", "2001-10-02", false, "s"], ["Angel, S3 ep 10", "2001-09-24", false, "s"], ["Buffy, S6 ep 11", "2001-10-02", false, "s"], ["Angel, S3 ep 11", "2001-09-24", false, "s"], ["Buffy, S6 ep 12", "2001-10-02", false, "s"], ["Angel, S3 ep 12", "2001-09-24", false, "s"], ["Buffy, S6 ep 13", "2001-10-02", false, "s"], ["Angel, S3 eps 13–14", "2001-09-24", false, "s"], ["Buffy, S6 ep 14", "2001-10-02", false, "s"], ["Angel, S3 eps 15–16", "2001-09-24", false, "s"], ["Buffy, S6 ep 15", "2001-10-02", false, "s"], ["Angel, S3 ep 17", "2001-09-24", false, "s"], ["Buffy, S6 ep 16", "2001-10-02", false, "s"], ["Angel, S3 ep 18", "2001-09-24", false, "s"], ["Buffy, S6 ep 17", "2001-10-02", false, "s"], ["Angel, S3 eps 19–20", "2001-09-24", false, "s"], ["Buffy, S6 ep 18", "2001-10-02", false, "s"], ["Angel, S3 eps 21–22", "2001-09-24", false, "s"], ["Buffy, S6 eps 19–22", "2001-10-02", false, "s"]]], ["Buffy 7 and Angel 4", [["Angel, S4 ep 1", "2002-10-06", false, "s"], ["Buffy, S7 eps 1–2", "2002-09-24", false, "s"], ["Angel, S4 ep 2", "2002-10-06", false, "s"], ["Buffy, S7 ep 3", "2002-09-24", false, "s"], ["Angel, S4 eps 3–4", "2002-10-06", false, "s"], ["Buffy, S7 ep 4", "2002-09-24", false, "s"], ["Angel, S4 ep 5", "2002-10-06", false, "s"], ["Buffy, S7 eps 5–6", "2002-09-24", false, "s"], ["Angel, S4 ep 6", "2002-10-06", false, "s"], ["Buffy, S7 eps 7–9", "2002-09-24", false, "s"], ["Angel, S4 eps 7–8", "2002-10-06", false, "s"], ["Buffy, S7 eps 10–11", "2002-09-24", false, "s"], ["Angel, S4 eps 9–11", "2002-10-06", false, "s"], ["Buffy, S7 eps 12–14", "2002-09-24", false, "s"], ["Angel, S4 ep 12", "2002-10-06", false, "s"], ["Buffy, S7 eps 15–16", "2002-09-24", false, "s"], ["Angel, S4 eps 13–14", "2002-10-06", false, "s"], ["Buffy, S7 ep 17", "2002-09-24", false, "s"], ["Angel, S4 eps 15–17", "2002-10-06", false, "s"], ["Buffy, S7 ep 18", "2002-09-24", false, "s"], ["Angel, S4 eps 18–19", "2002-10-06", false, "s"], ["Buffy, S7 ep 19", "2002-09-24", false, "s"], ["Angel, S4 eps 20–22", "2002-10-06", false, "s"], ["Buffy, S7 eps 20–22", "2002-09-24", false, "s"]]], ["Angel season 5", [["Angel, S5 eps 1–22", "2003-10-01", false, "s"]]]];
+BUFFY.push.apply(BUFFY, [["Comics · Fray and Tales", [["Fray, issues 1–8", "2001", true, "s", 1], ["Tales of the Slayers (one-shot)", "2002", true, "s", 1], ["Tales of the Vampires, issues 1–5", "2003", true, "s", 1]]], ["Comics · After the Fall", [["Angel: After the Fall, issues 1–8", "2007", false, "s", 1], ["Spike: After the Fall, issues 1–4", "2008", false, "s", 1], ["Angel: After the Fall, issues 9–17", "2008", false, "s", 1], ["Spike, issues 1–8", "2010", false, "s", 1]]], ["Comics · Season 8", [["Buffy Season 8, issues 1–20", "2007", false, "s", 1], ["Willow: Goddesses and Monsters (one-shot)", "2009", false, "s", 1], ["Buffy Season 8, issues 21–25", "2007", false, "s", 1], ["Tales of the Vampires: The Thrill (one-shot)", "2009", false, "s", 1], ["Buffy Season 8, issues 26–35", "2007", false, "s", 1], ["Riley: Commitment Through Distance, Virtue Through Sin (one-shot)", "2010", false, "s", 1], ["Buffy Season 8, issues 36–40", "2007", false, "s", 1]]], ["Comics · Season 9", [["Buffy Season 9, issues 1–4", "2011", false, "s", 1], ["Angel & Faith Season 9, issues 1–5", "2011", false, "s", 1], ["Buffy Season 9, issues 5–7", "2011", false, "s", 1], ["Angel & Faith Season 9, issues 6–9", "2011", false, "s", 1], ["Buffy Season 9, issues 8–10", "2011", false, "s", 1], ["Angel & Faith Season 9, issues 10–14", "2011", false, "s", 1], ["Willow: Wonderland, issues 1–5", "2012", false, "s", 1], ["Spike: A Dark Place, issues 1–5", "2012", false, "s", 1], ["Buffy Season 9, issues 11–15", "2011", false, "s", 1], ["Angel & Faith Season 9, issues 15–19", "2011", false, "s", 1], ["Buffy Season 9, issues 16–20", "2011", false, "s", 1], ["Angel & Faith Season 9, issues 20–25", "2011", false, "s", 1], ["Buffy Season 9, issues 21–25", "2011", false, "s", 1]]], ["Comics · Season 10", [["Buffy Season 10, issues 1–5", "2014", false, "s", 1], ["Angel & Faith Season 10, issues 1–5", "2014", false, "s", 1], ["Buffy Season 10, issues 6–9", "2014", false, "s", 1], ["Angel & Faith Season 10, issues 6–10", "2014", false, "s", 1], ["Buffy Season 10, issue 10", "2014", false, "s", 1], ["Angel & Faith Season 10, issues 11–14", "2014", false, "s", 1], ["Buffy Season 10, issues 11–15", "2014", false, "s", 1], ["Angel & Faith Season 10, issue 15", "2014", false, "s", 1], ["Buffy Season 10, issues 16–18", "2014", false, "s", 1], ["Angel & Faith Season 10, issues 16–18", "2014", false, "s", 1], ["Buffy Season 10, issues 19–20", "2014", false, "s", 1], ["Angel & Faith Season 10, issues 19–20", "2014", false, "s", 1], ["Buffy Season 10, issues 21–25", "2014", false, "s", 1], ["Angel & Faith Season 10, issues 21–25", "2014", false, "s", 1], ["Buffy Season 10, issues 26–30", "2014", false, "s", 1]]], ["Comics · Seasons 11 and 12", [["Buffy Season 11, issues 1–6", "2016", false, "s", 1], ["Angel Season 11, issues 1–12", "2017", false, "s", 1], ["Buffy Season 11, issues 7–12", "2016", false, "s", 1], ["Giles: Girl Blue, issues 1–4", "2018", false, "s", 1], ["Buffy Season 12, issues 1–4", "2018", false, "s", 1]]]]);
+var BUFFYG = [];
+BUFFY.forEach(function (g) {
+  var ids = [];
+  g[1].forEach(function (a) { items.push({ id: a[0], type: a[3], date: a[1], opt: !!a[2], comic: a[4] === 1, phase: -1, upcoming: false, list: "buffy" }); ids.push(a[0]); });
+  BUFFYG.push([g[0], ids]);
+});
+var TREK = [["The Original Series, season 1", "1966-09-08", false, "s", 29, false], ["The Original Series, season 2", "1967-09-15", false, "s", 26, false], ["The Original Series, season 3", "1968-09-20", false, "s", 24, false], ["The Animated Series, season 1", "1973-09-08", true, "s", 16, false], ["The Animated Series, season 2", "1974-09-07", true, "s", 6, false], ["Star Trek: The Motion Picture", "1979-12-07", false, "f", 0, false], ["Star Trek II: The Wrath of Khan", "1982-06-04", false, "f", 0, false], ["Star Trek III: The Search for Spock", "1984-06-01", false, "f", 0, false], ["Star Trek IV: The Voyage Home", "1986-11-26", false, "f", 0, false], ["Star Trek V: The Final Frontier", "1989-06-09", false, "f", 0, false], ["Star Trek VI: The Undiscovered Country", "1991-12-06", false, "f", 0, false], ["The Next Generation, season 1", "1987-09-28", false, "s", 26, false], ["The Next Generation, season 2", "1988-11-21", false, "s", 22, false], ["The Next Generation, season 3", "1989-09-25", false, "s", 26, false], ["The Next Generation, season 4", "1990-09-24", false, "s", 26, false], ["The Next Generation, season 5", "1991-09-23", false, "s", 26, false], ["The Next Generation, season 6", "1992-09-21", false, "s", 26, false], ["The Next Generation, season 7", "1993-09-20", false, "s", 26, false], ["Deep Space Nine, season 1", "1993-01-03", false, "s", 20, false], ["Deep Space Nine, season 2", "1993-09-26", false, "s", 26, false], ["Deep Space Nine, season 3", "1994-09-25", false, "s", 26, false], ["Deep Space Nine, season 4", "1995-10-02", false, "s", 26, false], ["Deep Space Nine, season 5", "1996-09-30", false, "s", 26, false], ["Deep Space Nine, season 6", "1997-09-29", false, "s", 26, false], ["Deep Space Nine, season 7", "1998-09-30", false, "s", 26, false], ["Star Trek Generations", "1994-11-18", false, "f", 0, false], ["Voyager, season 1", "1995-01-16", false, "s", 16, false], ["Voyager, season 2", "1995-08-28", false, "s", 26, false], ["Voyager, season 3", "1996-09-04", false, "s", 26, false], ["Voyager, season 4", "1997-09-03", false, "s", 26, false], ["Voyager, season 5", "1998-10-07", false, "s", 26, false], ["Voyager, season 6", "1999-09-22", false, "s", 26, false], ["Voyager, season 7", "2000-10-04", false, "s", 26, false], ["Star Trek: First Contact", "1996-11-22", false, "f", 0, false], ["Star Trek: Insurrection", "1998-12-11", false, "f", 0, false], ["Enterprise, season 1", "2001-09-26", false, "s", 26, false], ["Enterprise, season 2", "2002-09-18", false, "s", 26, false], ["Enterprise, season 3", "2003-09-10", false, "s", 24, false], ["Enterprise, season 4", "2004-10-08", false, "s", 22, false], ["Star Trek: Nemesis", "2002-12-13", false, "f", 0, false], ["Star Trek (2009)", "2009-05-08", false, "f", 0, false], ["Star Trek Into Darkness", "2013-05-16", false, "f", 0, false], ["Star Trek Beyond", "2016-07-22", false, "f", 0, false], ["Discovery, season 1", "2017-09-24", false, "s", 15, false], ["Discovery, season 2", "2019-01-17", false, "s", 14, false], ["Discovery, season 3", "2020-10-15", false, "s", 13, false], ["Discovery, season 4", "2021-11-18", false, "s", 13, false], ["Discovery, season 5", "2024-04-04", false, "s", 10, false], ["Short Treks", "2018-10-04", true, "s", 10, false], ["Picard, season 1", "2020-01-23", false, "s", 10, false], ["Picard, season 2", "2022-03-03", false, "s", 10, false], ["Picard, season 3", "2023-02-16", false, "s", 10, false], ["Lower Decks, season 1", "2020-08-06", false, "s", 10, false], ["Lower Decks, season 2", "2021-08-12", false, "s", 10, false], ["Lower Decks, season 3", "2022-08-25", false, "s", 10, false], ["Lower Decks, season 4", "2023-09-07", false, "s", 10, false], ["Lower Decks, season 5", "2024-10-24", false, "s", 10, false], ["Prodigy, season 1", "2021-10-28", false, "s", 20, false], ["Prodigy, season 2", "2024-07-01", false, "s", 20, false], ["Strange New Worlds, season 1", "2022-05-05", false, "s", 10, false], ["Strange New Worlds, season 2", "2023-06-15", false, "s", 10, false], ["Strange New Worlds, season 3", "2025-07-17", false, "s", 10, false], ["Strange New Worlds, season 4", "2026-07-23", false, "s", 10, false], ["Star Trek: Section 31", "2025-01-24", true, "f", 0, false], ["Starfleet Academy, season 1", "2026-01-15", false, "s", 10, false], ["Starfleet Academy, season 2 (expected 2027)", "2027", false, "s", 0, true]];
+TREK.forEach(function (a) { items.push({ id: a[0], type: a[3], date: a[1], opt: !!a[2], n: a[4], phase: -1, upcoming: !!a[5], list: "trek" }); });
+var TREKREL = [["1960s and 1970s", ["The Original Series, season 1", "The Original Series, season 2", "The Original Series, season 3", "The Animated Series, season 1", "The Animated Series, season 2", "Star Trek: The Motion Picture"]], ["1980s", ["Star Trek II: The Wrath of Khan", "Star Trek III: The Search for Spock", "Star Trek IV: The Voyage Home", "The Next Generation, season 1", "The Next Generation, season 2", "Star Trek V: The Final Frontier", "The Next Generation, season 3"]], ["1990s", ["The Next Generation, season 4", "The Next Generation, season 5", "Star Trek VI: The Undiscovered Country", "The Next Generation, season 6", "Deep Space Nine, season 1", "The Next Generation, season 7", "Deep Space Nine, season 2", "Deep Space Nine, season 3", "Star Trek Generations", "Voyager, season 1", "Voyager, season 2", "Deep Space Nine, season 4", "Voyager, season 3", "Deep Space Nine, season 5", "Star Trek: First Contact", "Voyager, season 4", "Deep Space Nine, season 6", "Deep Space Nine, season 7", "Voyager, season 5", "Star Trek: Insurrection", "Voyager, season 6"]], ["2000s", ["Voyager, season 7", "Enterprise, season 1", "Enterprise, season 2", "Star Trek: Nemesis", "Enterprise, season 3", "Enterprise, season 4", "Star Trek (2009)"]], ["2010s", ["Star Trek Into Darkness", "Star Trek Beyond", "Discovery, season 1", "Short Treks", "Discovery, season 2"]], ["2020s", ["Picard, season 1", "Lower Decks, season 1", "Discovery, season 3", "Lower Decks, season 2", "Prodigy, season 1", "Discovery, season 4", "Picard, season 2", "Strange New Worlds, season 1", "Lower Decks, season 3", "Picard, season 3", "Strange New Worlds, season 2", "Lower Decks, season 4", "Discovery, season 5", "Prodigy, season 2", "Lower Decks, season 5", "Star Trek: Section 31", "Strange New Worlds, season 3", "Starfleet Academy, season 1", "Strange New Worlds, season 4", "Starfleet Academy, season 2 (expected 2027)"]]];
+var TREKCH = [["22nd century", ["Enterprise, season 1", "Enterprise, season 2", "Enterprise, season 3", "Enterprise, season 4"]], ["Before Kirk", ["Discovery, season 1", "Discovery, season 2", "Strange New Worlds, season 1", "Strange New Worlds, season 2", "Strange New Worlds, season 3", "Strange New Worlds, season 4"]], ["Kirk era", ["The Original Series, season 1", "The Original Series, season 2", "The Original Series, season 3", "The Animated Series, season 1", "The Animated Series, season 2", "Star Trek: The Motion Picture", "Star Trek II: The Wrath of Khan", "Star Trek III: The Search for Spock", "Star Trek IV: The Voyage Home", "Star Trek V: The Final Frontier", "Star Trek VI: The Undiscovered Country"]], ["24th century", ["Star Trek: Section 31", "The Next Generation, season 1", "The Next Generation, season 2", "The Next Generation, season 3", "The Next Generation, season 4", "The Next Generation, season 5", "The Next Generation, season 6", "Deep Space Nine, season 1", "The Next Generation, season 7", "Deep Space Nine, season 2", "Deep Space Nine, season 3", "Star Trek Generations", "Voyager, season 1", "Voyager, season 2", "Deep Space Nine, season 4", "Voyager, season 3", "Deep Space Nine, season 5", "Star Trek: First Contact", "Voyager, season 4", "Deep Space Nine, season 6", "Deep Space Nine, season 7", "Voyager, season 5", "Star Trek: Insurrection", "Voyager, season 6", "Voyager, season 7", "Star Trek: Nemesis"]], ["Later 24th century", ["Lower Decks, season 1", "Lower Decks, season 2", "Lower Decks, season 3", "Lower Decks, season 4", "Lower Decks, season 5", "Prodigy, season 1", "Prodigy, season 2", "Picard, season 1", "Picard, season 2", "Picard, season 3"]], ["32nd century", ["Discovery, season 3", "Discovery, season 4", "Discovery, season 5", "Starfleet Academy, season 1", "Starfleet Academy, season 2 (expected 2027)"]], ["Separate timeline and extras", ["Star Trek (2009)", "Star Trek Into Darkness", "Star Trek Beyond", "Short Treks"]]];
+var SWARS = [["The Clone Wars, S2 ep 16", "2009-10-02", false, "s", 1, false, 216], ["The Clone Wars, S1 ep 16", "2008-10-03", false, "s", 1, false, 116], ["The Clone Wars, S3 ep 1", "2010-09-17", false, "s", 1, false, 301], ["The Clone Wars, S3 ep 3", "2010-09-17", false, "s", 1, false, 303], ["The Clone Wars, S1 eps 1–15", "2008-10-03", false, "s", 15, false, 101], ["The Clone Wars, S1 eps 17–21", "2008-10-03", false, "s", 5, false, 117], ["The Clone Wars, S2 eps 1–3", "2009-10-02", false, "s", 3, false, 201], ["The Clone Wars, S2 eps 17–19", "2009-10-02", false, "s", 3, false, 217], ["The Clone Wars, S2 eps 4–14", "2009-10-02", false, "s", 11, false, 204], ["The Clone Wars, S2 eps 20–22", "2009-10-02", false, "s", 3, false, 220], ["The Clone Wars, S3 eps 5–7", "2010-09-17", false, "s", 3, false, 305], ["The Clone Wars, S3 ep 2", "2010-09-17", false, "s", 1, false, 302], ["The Clone Wars, S3 ep 4", "2010-09-17", false, "s", 1, false, 304], ["The Clone Wars, S3 ep 8", "2010-09-17", false, "s", 1, false, 308], ["The Clone Wars, S1 ep 22", "2008-10-03", false, "s", 1, false, 122], ["The Clone Wars, S3 eps 9–11", "2010-09-17", false, "s", 3, false, 309], ["The Clone Wars, S2 ep 15", "2009-10-02", false, "s", 1, false, 215], ["The Clone Wars, S3 eps 12–22", "2010-09-17", false, "s", 11, false, 312], ["The Clone Wars, S4 eps 1–22", "2011-09-16", false, "s", 22, false, 401], ["The Clone Wars, S5 eps 2–13", "2012-09-29", false, "s", 12, false, 502], ["The Clone Wars, S5 ep 1", "2012-09-29", false, "s", 1, false, 501], ["The Clone Wars, S5 eps 14–20", "2012-09-29", false, "s", 7, false, 514], ["The Clone Wars, S6 eps 1–13", "2014-03-07", false, "s", 13, false, 601], ["The Clone Wars, S7 eps 5–8", "2020-02-21", false, "s", 4, false, 705], ["The Clone Wars, S7 eps 1–4", "2020-02-21", false, "s", 4, false, 701], ["The Clone Wars, S7 eps 9–12", "2020-02-21", false, "s", 4, false, 709], ["The Phantom Menace (Episode I)", "1999-05-19", false, "f", 0, false, 0], ["Attack of the Clones (Episode II)", "2002-05-16", false, "f", 0, false, 0], ["Revenge of the Sith (Episode III)", "2005-05-19", false, "f", 0, false, 0], ["Star Wars: The Clone Wars (2008 film)", "2008-08-15", false, "f", 0, false, 0], ["Solo: A Star Wars Story", "2018-05-25", false, "f", 0, false, 0], ["Rogue One: A Star Wars Story", "2016-12-16", false, "f", 0, false, 0], ["A New Hope (Episode IV)", "1977-05-25", false, "f", 0, false, 0], ["The Empire Strikes Back (Episode V)", "1980-05-21", false, "f", 0, false, 0], ["Return of the Jedi (Episode VI)", "1983-05-25", false, "f", 0, false, 0], ["The Force Awakens (Episode VII)", "2015-12-18", false, "f", 0, false, 0], ["The Last Jedi (Episode VIII)", "2017-12-15", false, "f", 0, false, 0], ["The Rise of Skywalker (Episode IX)", "2019-12-20", false, "f", 0, false, 0], ["The Mandalorian and Grogu", "2026-05-22", false, "f", 0, false, 0], ["Tales of the Jedi", "2022-10-26", false, "s", 6, false, 0], ["Tales of the Empire", "2024-05-04", false, "s", 6, false, 0], ["Tales of the Underworld", "2025-05-04", false, "s", 6, false, 0], ["The Bad Batch, season 1", "2021-05-04", false, "s", 16, false, 0], ["The Bad Batch, season 2", "2023-01-04", false, "s", 16, false, 0], ["The Bad Batch, season 3", "2024-02-21", false, "s", 15, false, 0], ["Maul – Shadow Lord", "2026-04-06", false, "s", 10, false, 0], ["Obi-Wan Kenobi", "2022-05-27", false, "s", 6, false, 0], ["Andor, season 1", "2022-09-21", false, "s", 12, false, 0], ["Andor, season 2", "2025-04-22", false, "s", 12, false, 0], ["Rebels, season 1", "2014-10-03", false, "s", 15, false, 0], ["Rebels, season 2", "2015-06-20", false, "s", 22, false, 0], ["Rebels, season 3", "2016-09-24", false, "s", 22, false, 0], ["Rebels, season 4", "2017-10-16", false, "s", 16, false, 0], ["The Mandalorian, season 1", "2019-11-12", false, "s", 8, false, 0], ["The Mandalorian, season 2", "2020-10-30", false, "s", 8, false, 0], ["The Book of Boba Fett", "2021-12-29", false, "s", 7, false, 0], ["The Mandalorian, season 3", "2023-03-01", false, "s", 8, false, 0], ["Ahsoka, season 1", "2023-08-23", false, "s", 8, false, 0], ["Skeleton Crew", "2024-12-03", false, "s", 8, false, 0], ["Ahsoka, season 2", "2027-01-20", false, "s", 0, true, 0], ["Visions, volume 1", "2021-09-22", true, "s", 9, false, 0], ["Visions, volume 2", "2023-05-04", true, "s", 9, false, 0], ["Visions, volume 3", "2025-10-29", true, "s", 9, false, 0]];
+SWARS.forEach(function (a) { items.push({ id: a[0], type: a[3], date: a[1], opt: !!a[2], n: a[4], phase: -1, upcoming: !!a[5], list: "swars" }); });
+var SWREL = [["1970s", ["A New Hope (Episode IV)"]], ["1980s", ["The Empire Strikes Back (Episode V)", "Return of the Jedi (Episode VI)"]], ["1990s", ["The Phantom Menace (Episode I)"]], ["2000s", ["Attack of the Clones (Episode II)", "Revenge of the Sith (Episode III)", "Star Wars: The Clone Wars (2008 film)", "The Clone Wars, S1 eps 1–15", "The Clone Wars, S1 ep 16", "The Clone Wars, S1 eps 17–21", "The Clone Wars, S1 ep 22", "The Clone Wars, S2 eps 1–3", "The Clone Wars, S2 eps 4–14", "The Clone Wars, S2 ep 15", "The Clone Wars, S2 ep 16", "The Clone Wars, S2 eps 17–19", "The Clone Wars, S2 eps 20–22"]], ["2010s", ["The Clone Wars, S3 ep 1", "The Clone Wars, S3 ep 2", "The Clone Wars, S3 ep 3", "The Clone Wars, S3 ep 4", "The Clone Wars, S3 eps 5–7", "The Clone Wars, S3 ep 8", "The Clone Wars, S3 eps 9–11", "The Clone Wars, S3 eps 12–22", "The Clone Wars, S4 eps 1–22", "The Clone Wars, S5 ep 1", "The Clone Wars, S5 eps 2–13", "The Clone Wars, S5 eps 14–20", "The Clone Wars, S6 eps 1–13", "Rebels, season 1", "Rebels, season 2", "The Force Awakens (Episode VII)", "Rebels, season 3", "Rogue One: A Star Wars Story", "Rebels, season 4", "The Last Jedi (Episode VIII)", "Solo: A Star Wars Story", "The Mandalorian, season 1", "The Rise of Skywalker (Episode IX)"]], ["2020s", ["The Clone Wars, S7 eps 1–4", "The Clone Wars, S7 eps 5–8", "The Clone Wars, S7 eps 9–12", "The Mandalorian, season 2", "The Bad Batch, season 1", "Visions, volume 1", "The Book of Boba Fett", "Obi-Wan Kenobi", "Andor, season 1", "Tales of the Jedi", "The Bad Batch, season 2", "The Mandalorian, season 3", "Visions, volume 2", "Ahsoka, season 1", "The Bad Batch, season 3", "Tales of the Empire", "Skeleton Crew", "Andor, season 2", "Tales of the Underworld", "Visions, volume 3", "Maul – Shadow Lord", "The Mandalorian and Grogu", "Ahsoka, season 2"]]];
+var SWCH = [["Before the prequels", ["Tales of the Jedi"]], ["The prequels and The Clone Wars", ["The Phantom Menace (Episode I)", "Attack of the Clones (Episode II)", "The Clone Wars, S2 ep 16", "The Clone Wars, S1 ep 16", "Star Wars: The Clone Wars (2008 film)", "The Clone Wars, S3 ep 1", "The Clone Wars, S3 ep 3", "The Clone Wars, S1 eps 1–15", "The Clone Wars, S1 eps 17–21", "The Clone Wars, S2 eps 1–3", "The Clone Wars, S2 eps 17–19", "The Clone Wars, S2 eps 4–14", "The Clone Wars, S2 eps 20–22", "The Clone Wars, S3 eps 5–7", "The Clone Wars, S3 ep 2", "The Clone Wars, S3 ep 4", "The Clone Wars, S3 ep 8", "The Clone Wars, S1 ep 22", "The Clone Wars, S3 eps 9–11", "The Clone Wars, S2 ep 15", "The Clone Wars, S3 eps 12–22", "The Clone Wars, S4 eps 1–22", "The Clone Wars, S5 eps 2–13", "The Clone Wars, S5 ep 1", "The Clone Wars, S5 eps 14–20", "The Clone Wars, S6 eps 1–13", "The Clone Wars, S7 eps 5–8", "The Clone Wars, S7 eps 1–4", "Revenge of the Sith (Episode III)", "The Clone Wars, S7 eps 9–12"]], ["The rise of the Empire", ["Tales of the Empire", "Tales of the Underworld", "The Bad Batch, season 1", "The Bad Batch, season 2", "The Bad Batch, season 3", "Maul – Shadow Lord", "Solo: A Star Wars Story", "Obi-Wan Kenobi"]], ["The Rebellion", ["Andor, season 1", "Rebels, season 1", "Rebels, season 2", "Andor, season 2", "Rebels, season 3", "Rebels, season 4", "Rogue One: A Star Wars Story"]], ["The original trilogy", ["A New Hope (Episode IV)", "The Empire Strikes Back (Episode V)", "Return of the Jedi (Episode VI)"]], ["The New Republic", ["The Mandalorian, season 1", "The Mandalorian, season 2", "The Book of Boba Fett", "The Mandalorian, season 3", "Ahsoka, season 1", "Skeleton Crew", "The Mandalorian and Grogu", "Ahsoka, season 2"]], ["The sequel trilogy", ["The Force Awakens (Episode VII)", "The Last Jedi (Episode VIII)", "The Rise of Skywalker (Episode IX)"]], ["Anthology, non-canon extras", ["Visions, volume 1", "Visions, volume 2", "Visions, volume 3"]]];
+var NEWL = {
+  stargate: { items: [["Stargate (1994 film)", "1994-10-28", 0, "f", 0, 0, 0], ["Stargate SG-1, season 1", "1997", 0, "s", 22, 0, 0], ["Stargate SG-1, season 2", "1998", 0, "s", 22, 0, 0], ["Stargate SG-1, season 3", "1999", 0, "s", 22, 0, 0], ["Stargate SG-1, season 4", "2000", 0, "s", 22, 0, 0], ["Stargate SG-1, season 5", "2001", 0, "s", 22, 0, 0], ["Stargate SG-1, season 6", "2002", 0, "s", 22, 0, 0], ["Stargate SG-1, season 7", "2003", 0, "s", 22, 0, 0], ["Stargate SG-1, S8 eps 1–2", "2004", 0, "s", 2, 0, 0], ["Stargate Atlantis, S1 eps 1–2", "2004", 0, "s", 2, 0, 0], ["Stargate SG-1, S8 eps 3–20", "2004", 0, "s", 18, 0, 0], ["Stargate Atlantis, S1 eps 3–20", "2004", 0, "s", 18, 0, 0], ["Stargate Atlantis, S2 eps 1–5", "2005", 0, "s", 5, 0, 0], ["Stargate SG-1, S9 eps 1–5", "2005", 0, "s", 5, 0, 0], ["Stargate Atlantis, S2 eps 6–10", "2005", 0, "s", 5, 0, 0], ["Stargate SG-1, S9 eps 6–10", "2005", 0, "s", 5, 0, 0], ["Stargate Atlantis, S2 eps 11–15", "2005", 0, "s", 5, 0, 0], ["Stargate SG-1, S9 eps 11–15", "2005", 0, "s", 5, 0, 0], ["Stargate Atlantis, S2 eps 16–20", "2005", 0, "s", 5, 0, 0], ["Stargate SG-1, S9 eps 16–20", "2005", 0, "s", 5, 0, 0], ["Stargate SG-1, S10 eps 1–5", "2006", 0, "s", 5, 0, 0], ["Stargate Atlantis, S3 eps 1–5", "2006", 0, "s", 5, 0, 0], ["Stargate SG-1, S10 eps 6–10", "2006", 0, "s", 5, 0, 0], ["Stargate Atlantis, S3 eps 6–10", "2006", 0, "s", 5, 0, 0], ["Stargate SG-1, S10 eps 11–15", "2006", 0, "s", 5, 0, 0], ["Stargate Atlantis, S3 eps 11–15", "2006", 0, "s", 5, 0, 0], ["Stargate SG-1, S10 eps 16–20", "2006", 0, "s", 5, 0, 0], ["Stargate: The Ark of Truth", "2008-03-11", 0, "f", 0, 0, 0], ["Stargate Atlantis, S3 eps 16–20", "2006", 0, "s", 5, 0, 0], ["Stargate Atlantis, season 4", "2007", 0, "s", 20, 0, 0], ["Stargate Atlantis, S5 eps 1–1", "2008", 0, "s", 1, 0, 0], ["Stargate: Continuum", "2008-07-29", 0, "f", 0, 0, 0], ["Stargate Atlantis, S5 eps 2–20", "2008", 0, "s", 19, 0, 0], ["Stargate Universe, season 1", "2009", 0, "s", 20, 0, 0], ["Stargate Universe, season 2", "2010", 0, "s", 20, 0, 0], ["Stargate Origins", "2018", 1, "s", 10, 0, 0]], story: [["The film and SG-1 seasons 1–7", ["Stargate (1994 film)", "Stargate SG-1, season 1", "Stargate SG-1, season 2", "Stargate SG-1, season 3", "Stargate SG-1, season 4", "Stargate SG-1, season 5", "Stargate SG-1, season 6", "Stargate SG-1, season 7"]], ["SG-1 season 8 and Atlantis season 1", ["Stargate SG-1, S8 eps 1–2", "Stargate Atlantis, S1 eps 1–2", "Stargate SG-1, S8 eps 3–20", "Stargate Atlantis, S1 eps 3–20"]], ["SG-1 season 9 and Atlantis season 2", ["Stargate Atlantis, S2 eps 1–5", "Stargate SG-1, S9 eps 1–5", "Stargate Atlantis, S2 eps 6–10", "Stargate SG-1, S9 eps 6–10", "Stargate Atlantis, S2 eps 11–15", "Stargate SG-1, S9 eps 11–15", "Stargate Atlantis, S2 eps 16–20", "Stargate SG-1, S9 eps 16–20"]], ["SG-1 season 10 and Atlantis season 3", ["Stargate SG-1, S10 eps 1–5", "Stargate Atlantis, S3 eps 1–5", "Stargate SG-1, S10 eps 6–10", "Stargate Atlantis, S3 eps 6–10", "Stargate SG-1, S10 eps 11–15", "Stargate Atlantis, S3 eps 11–15", "Stargate SG-1, S10 eps 16–20", "Stargate: The Ark of Truth", "Stargate Atlantis, S3 eps 16–20"]], ["Atlantis seasons 4 and 5, plus Continuum", ["Stargate Atlantis, season 4", "Stargate Atlantis, S5 eps 1–1", "Stargate: Continuum", "Stargate Atlantis, S5 eps 2–20"]], ["Universe and extras", ["Stargate Universe, season 1", "Stargate Universe, season 2", "Stargate Origins"]]], release: null },
+  dwho: { items: [["Doctor Who, series 1", "2005-03-26", 0, "s", 13, 0, 0], ["The Christmas Invasion", "2005-12-25", 0, "s", 0, 0, 1], ["Doctor Who, series 2", "2006-04-15", 0, "s", 13, 0, 0], ["Torchwood, series 1", "2006-10-22", 0, "s", 13, 0, 0], ["The Runaway Bride", "2006-12-25", 0, "s", 0, 0, 1], ["The Sarah Jane Adventures: Invasion of the Bane", "2007-01-01", 0, "s", 0, 0, 1], ["Doctor Who, series 3", "2007-03-31", 0, "s", 13, 0, 0], ["The Sarah Jane Adventures, series 1", "2007-09-24", 0, "s", 12, 0, 0], ["Voyage of the Damned", "2007-12-25", 0, "s", 0, 0, 1], ["Torchwood, series 2", "2008-01-16", 0, "s", 13, 0, 0], ["Doctor Who, series 4", "2008-04-05", 0, "s", 13, 0, 0], ["The Sarah Jane Adventures, series 2", "2008-09-29", 0, "s", 12, 0, 0], ["The Next Doctor", "2008-12-25", 0, "s", 0, 0, 1], ["Planet of the Dead", "2009-04-11", 0, "s", 0, 0, 1], ["Torchwood: Children of Earth", "2009-07-06", 0, "s", 5, 0, 0], ["The Sarah Jane Adventures, series 3", "2009-10-19", 0, "s", 12, 0, 0], ["The Waters of Mars", "2009-11-15", 0, "s", 0, 0, 1], ["The End of Time", "2009-12-25", 0, "s", 0, 0, 1], ["Doctor Who, series 5", "2010-04-03", 0, "s", 13, 0, 0], ["The Sarah Jane Adventures, series 4", "2010-10-04", 0, "s", 12, 0, 0], ["A Christmas Carol", "2010-12-25", 0, "s", 0, 0, 1], ["Doctor Who, series 6", "2011-04-23", 0, "s", 13, 0, 0], ["Torchwood: Miracle Day", "2011-07-08", 0, "s", 10, 0, 0], ["The Sarah Jane Adventures, series 5", "2011-10-10", 0, "s", 6, 0, 0], ["The Doctor, the Widow and the Wardrobe", "2011-12-25", 0, "s", 0, 0, 1], ["Doctor Who, series 7 part 1", "2012-09-01", 0, "s", 5, 0, 0], ["The Snowmen", "2012-12-25", 0, "s", 0, 0, 1], ["Doctor Who, series 7 part 2", "2013-03-30", 0, "s", 8, 0, 0], ["The Day of the Doctor", "2013-11-23", 0, "s", 0, 0, 1], ["The Time of the Doctor", "2013-12-25", 0, "s", 0, 0, 1], ["Doctor Who, series 8", "2014-08-23", 0, "s", 12, 0, 0], ["Last Christmas", "2014-12-25", 0, "s", 0, 0, 1], ["Doctor Who, series 9", "2015-09-19", 0, "s", 12, 0, 0], ["The Husbands of River Song", "2015-12-25", 0, "s", 0, 0, 1], ["Class", "2016-10-22", 1, "s", 8, 0, 0], ["The Return of Doctor Mysterio", "2016-12-25", 0, "s", 0, 0, 1], ["Doctor Who, series 10", "2017-04-15", 0, "s", 12, 0, 0], ["Twice Upon a Time", "2017-12-25", 0, "s", 0, 0, 1], ["Doctor Who, series 11", "2018-10-07", 0, "s", 10, 0, 0], ["Resolution", "2019-01-01", 0, "s", 0, 0, 1], ["Doctor Who, series 12", "2020-01-01", 0, "s", 10, 0, 0], ["Revolution of the Daleks", "2021-01-01", 0, "s", 0, 0, 1], ["Doctor Who, series 13 (Flux)", "2021-10-31", 0, "s", 6, 0, 0], ["Eve of the Daleks", "2022-01-01", 0, "s", 0, 0, 1], ["Legend of the Sea Devils", "2022-04-17", 0, "s", 0, 0, 1], ["The Power of the Doctor", "2022-10-23", 0, "s", 0, 0, 1], ["The Star Beast", "2023-11-25", 0, "s", 0, 0, 1], ["Wild Blue Yonder", "2023-12-02", 0, "s", 0, 0, 1], ["The Giggle", "2023-12-09", 0, "s", 0, 0, 1], ["The Church on Ruby Road", "2023-12-25", 0, "s", 0, 0, 1], ["Doctor Who, series 14", "2024-05-11", 0, "s", 8, 0, 0], ["Joy to the World", "2024-12-25", 0, "s", 0, 0, 1], ["Doctor Who, series 15", "2025-04-12", 0, "s", 8, 0, 0], ["The War Between the Land and the Sea", "2025", 1, "s", 0, 0, 1]], story: [["Ninth Doctor", ["Doctor Who, series 1"]], ["Tenth Doctor", ["The Christmas Invasion", "Doctor Who, series 2", "Torchwood, series 1", "The Runaway Bride", "The Sarah Jane Adventures: Invasion of the Bane", "Doctor Who, series 3", "The Sarah Jane Adventures, series 1", "Voyage of the Damned", "Torchwood, series 2", "Doctor Who, series 4", "The Sarah Jane Adventures, series 2", "The Next Doctor", "Planet of the Dead", "Torchwood: Children of Earth", "The Sarah Jane Adventures, series 3", "The Waters of Mars", "The End of Time"]], ["Eleventh Doctor", ["Doctor Who, series 5", "The Sarah Jane Adventures, series 4", "A Christmas Carol", "Doctor Who, series 6", "Torchwood: Miracle Day", "The Sarah Jane Adventures, series 5", "The Doctor, the Widow and the Wardrobe", "Doctor Who, series 7 part 1", "The Snowmen", "Doctor Who, series 7 part 2", "The Day of the Doctor", "The Time of the Doctor"]], ["Twelfth Doctor", ["Doctor Who, series 8", "Last Christmas", "Doctor Who, series 9", "The Husbands of River Song", "Class", "The Return of Doctor Mysterio", "Doctor Who, series 10", "Twice Upon a Time"]], ["Thirteenth Doctor", ["Doctor Who, series 11", "Resolution", "Doctor Who, series 12", "Revolution of the Daleks", "Doctor Who, series 13 (Flux)", "Eve of the Daleks", "Legend of the Sea Devils", "The Power of the Doctor"]], ["Fourteenth and Fifteenth Doctors", ["The Star Beast", "Wild Blue Yonder", "The Giggle", "The Church on Ruby Road", "Doctor Who, series 14", "Joy to the World", "Doctor Who, series 15", "The War Between the Land and the Sea"]]], release: null },
+  xmen: { items: [["X-Men", "2000-07-14", 0, "f", 0, 0, 0], ["X2: X-Men United", "2003-05-02", 0, "f", 0, 0, 0], ["X-Men: The Last Stand", "2006-05-26", 0, "f", 0, 0, 0], ["X-Men Origins: Wolverine", "2009-05-01", 0, "f", 0, 0, 0], ["X-Men: First Class", "2011-06-03", 0, "f", 0, 0, 0], ["The Wolverine", "2013-07-26", 0, "f", 0, 0, 0], ["X-Men: Days of Future Past", "2014-05-23", 0, "f", 0, 0, 0], ["Deadpool", "2016-02-12", 0, "f", 0, 0, 0], ["X-Men: Apocalypse", "2016-05-27", 0, "f", 0, 0, 0], ["Logan", "2017-03-03", 0, "f", 0, 0, 0], ["Deadpool 2", "2018-05-18", 0, "f", 0, 0, 0], ["X-Men: Dark Phoenix", "2019-06-07", 0, "f", 0, 0, 0], ["The New Mutants", "2020-08-28", 0, "f", 0, 0, 0]], story: [["1960s to the 1990s", ["X-Men: First Class", "X-Men: Days of Future Past", "X-Men Origins: Wolverine", "X-Men: Apocalypse"]], ["The 2000s", ["X-Men: Dark Phoenix", "X-Men", "X2: X-Men United", "X-Men: The Last Stand"]], ["The 2010s and later", ["The Wolverine", "Deadpool", "The New Mutants", "Deadpool 2", "Logan", "Deadpool & Wolverine"]]], release: [["2000s", ["X-Men", "X2: X-Men United", "X-Men: The Last Stand", "X-Men Origins: Wolverine"]], ["2010s", ["X-Men: First Class", "The Wolverine", "X-Men: Days of Future Past", "Deadpool", "X-Men: Apocalypse", "Logan", "Deadpool 2", "X-Men: Dark Phoenix"]], ["2020s", ["The New Mutants", "Deadpool & Wolverine"]]] },
+  dc: { items: [["Man of Steel", "2013-06-14", 0, "f", 0, 0, 0], ["Batman v Superman: Dawn of Justice", "2016-03-25", 0, "f", 0, 0, 0], ["Suicide Squad", "2016-08-05", 0, "f", 0, 0, 0], ["Wonder Woman", "2017-06-02", 0, "f", 0, 0, 0], ["Justice League", "2017-11-17", 0, "f", 0, 0, 0], ["Aquaman", "2018-12-21", 0, "f", 0, 0, 0], ["Shazam!", "2019-04-05", 0, "f", 0, 0, 0], ["Birds of Prey", "2020-02-07", 0, "f", 0, 0, 0], ["Wonder Woman 1984", "2020-12-25", 0, "f", 0, 0, 0], ["Zack Snyder's Justice League", "2021-03-18", 1, "f", 0, 0, 0], ["The Suicide Squad", "2021-08-06", 0, "f", 0, 0, 0], ["Peacemaker, season 1", "2022-01-13", 0, "s", 8, 0, 0], ["Black Adam", "2022-10-21", 0, "f", 0, 0, 0], ["Shazam! Fury of the Gods", "2023-03-17", 0, "f", 0, 0, 0], ["The Flash", "2023-06-16", 0, "f", 0, 0, 0], ["Blue Beetle", "2023-08-18", 0, "f", 0, 0, 0], ["Aquaman and the Lost Kingdom", "2023-12-22", 0, "f", 0, 0, 0], ["Joker", "2019-10-04", 0, "f", 0, 0, 0], ["The Batman", "2022-03-04", 0, "f", 0, 0, 0], ["The Penguin", "2024-09-19", 0, "s", 8, 0, 0], ["Joker: Folie à Deux", "2024-10-04", 0, "f", 0, 0, 0], ["Creature Commandos, season 1", "2024-12-05", 0, "s", 7, 0, 0], ["Superman", "2025-07-11", 0, "f", 0, 0, 0], ["Peacemaker, season 2", "2025-08-21", 0, "s", 8, 0, 0], ["Supergirl", "2026-06-26", 0, "f", 0, 0, 0], ["Lanterns, season 1", "2026-08-16", 0, "s", 8, 0, 0], ["Clayface", "2026-10-23", 0, "f", 0, 0, 0], ["Man of Tomorrow", "2027-07-09", 0, "f", 0, 1, 0]], story: [["The DCEU (2013–2023)", ["Man of Steel", "Batman v Superman: Dawn of Justice", "Suicide Squad", "Wonder Woman", "Justice League", "Aquaman", "Shazam!", "Birds of Prey", "Wonder Woman 1984", "Zack Snyder's Justice League", "The Suicide Squad", "Peacemaker, season 1", "Black Adam", "Shazam! Fury of the Gods", "The Flash", "Blue Beetle", "Aquaman and the Lost Kingdom"]], ["Elseworlds (separate worlds)", ["Joker", "Joker: Folie à Deux", "The Batman", "The Penguin"]], ["The DCU (2024 on)", ["Creature Commandos, season 1", "Superman", "Peacemaker, season 2", "Supergirl", "Lanterns, season 1", "Clayface", "Man of Tomorrow"]]], release: null },
+  bsg: { items: [["Caprica (pilot film)", "2009-01-22", 1, "f", 0, 0, 0], ["Caprica", "2010-01-29", 1, "s", 18, 0, 0], ["Blood & Chrome", "2012-11-09", 1, "s", 10, 0, 0], ["Battlestar Galactica (2003 miniseries)", "2003-12-08", 0, "f", 0, 0, 0], ["Battlestar Galactica, season 1", "2004-10-18", 0, "s", 13, 0, 0], ["Battlestar Galactica, S2 eps 1–17", "2005-07-15", 0, "s", 17, 0, 0], ["Razor (extended cut)", "2007-11-24", 0, "f", 0, 0, 0], ["Battlestar Galactica, S2 eps 18–20", "2005-07-15", 0, "s", 3, 0, 0], ["The Resistance (webisodes)", "2006-10-05", 1, "s", 10, 0, 0], ["Battlestar Galactica, season 3", "2006-10-06", 0, "s", 20, 0, 0], ["Battlestar Galactica, S4 eps 1–11", "2008-04-04", 0, "s", 11, 0, 0], ["The Face of the Enemy (webisodes)", "2008-10-14", 1, "s", 10, 0, 0], ["Battlestar Galactica, S4 eps 12–15", "2008-04-04", 0, "s", 4, 0, 0], ["The Plan", "2009-10-10", 0, "f", 0, 0, 0], ["Battlestar Galactica, S4 eps 16–20", "2008-04-04", 0, "s", 5, 0, 0]], story: [["Prequels (optional)", ["Caprica (pilot film)", "Caprica", "Blood & Chrome"]], ["The main story", ["Battlestar Galactica (2003 miniseries)", "Battlestar Galactica, season 1", "Battlestar Galactica, S2 eps 1–17", "Razor (extended cut)", "Battlestar Galactica, S2 eps 18–20", "The Resistance (webisodes)", "Battlestar Galactica, season 3", "Battlestar Galactica, S4 eps 1–11", "The Face of the Enemy (webisodes)", "Battlestar Galactica, S4 eps 12–15", "The Plan", "Battlestar Galactica, S4 eps 16–20"]]], release: null }
+};
+(function () {
+  var more = [["Gotham, season 1", "2014", 22], ["Gotham, season 2", "2015", 22], ["Gotham, season 3", "2016", 22], ["Gotham, season 4", "2017", 22], ["Gotham, season 5", "2018", 12],
+    ["Titans, season 1", "2018", 11], ["Doom Patrol, season 1", "2019", 15], ["Titans, season 2", "2019", 13], ["Doom Patrol, season 2", "2019", 9], ["Doom Patrol, season 3", "2021", 9], ["Titans, season 3", "2021", 12], ["Doom Patrol, season 4", "2022", 12], ["Titans, season 4", "2023", 12]];
+  more.forEach(function (a) { NEWL.dc.items.push([a[0], a[1], 1, "s", a[2], 0, 0]); });
+  NEWL.dc.story.push(["Gotham (optional)", more.slice(0, 5).map(function (a) { return a[0]; })], ["Titans and Doom Patrol (optional)", more.slice(5).map(function (a) { return a[0]; })]);
+})();
+Object.keys(NEWL).forEach(function (key) {
+  NEWL[key].items.forEach(function (a) { items.push({ id: a[0], type: a[3], date: a[1], opt: !!a[2], n: a[4], phase: -1, upcoming: !!a[5], special: a[6] === 1, list: key }); });
+});
+["Venom", "Venom: Let There Be Carnage", "Morbius", "Madame Web", "Venom: The Last Dance", "Kraven the Hunter"].forEach(function (t) { items.forEach(function (it) { if (it.id === t) it.studio = "Sony"; }); });
+var byId = {}; items.forEach(function (it) { byId[it.id] = it; });
+var cur = "marvel";
+var LISTS = [["arrow", "Arrowverse"], ["bsg", "Battlestar Galactica"], ["buffy", "Buffy & Angel"], ["dc", "DC Universe"], ["dwho", "Doctor Who"], ["marvel", "Marvel"], ["stargate", "Stargate"], ["trek", "Star Trek"], ["swars", "Star Wars"], ["xmen", "X-Men films"]];
+var HASHES = { marvel: "marvel", arrow: "arrowverse", buffy: "buffy", trek: "startrek", swars: "starwars", xmen: "xmen", dc: "dc", stargate: "stargate", bsg: "battlestar", dwho: "doctorwho" };
+var VIEWABLE = { marvel: 1, trek: 1, swars: 1, xmen: 1 };
+var FILMS = { marvel: 1, trek: 1, swars: 1, xmen: 1, dc: 1, stargate: 1, bsg: 1 };
+function getGroups() {
+  if (NEWL[cur]) return (NEWL[cur][view] || NEWL[cur].story).map(function (g) { return { name: g[0], list: g[1].map(function (t) { return byId[t]; }) }; });
+  if (cur === "swars") return (view === "story" ? SWCH : SWREL).map(function (g) { return { name: g[0], list: g[1].map(function (t) { return byId[t]; }) }; });
+  if (cur === "trek") return (view === "story" ? TREKCH : TREKREL).map(function (g) { return { name: g[0], list: g[1].map(function (t) { return byId[t]; }) }; });
+  if (cur === "buffy") return BUFFYG.map(function (g) { return { name: g[0], list: g[1].map(function (t) { return byId[t]; }) }; });
+  if (cur === "arrow") return ARROWG.map(function (g) { return { name: g[0], list: g[1].map(function (t) { return byId[t]; }) }; });
+  if (view === "story") return STORY.map(function (s) { return { name: s[0], list: s[1].map(function (t) { return byId[t]; }).filter(function (it) { return legacyOn || !it.net; }) }; });
+  return PHASES.map(function (p, pi) { return { name: p[0], list: items.filter(function (it) { return it.phase === pi && !it.list; }) }; });
+}
+var COUNTS = {
+  "WandaVision": 9, "The Falcon and the Winter Soldier": 6, "Loki, season 1": 6, "What If...?, season 1": 9, "Hawkeye": 6,
+  "Moon Knight": 6, "Ms. Marvel": 6, "I Am Groot": 5, "She-Hulk: Attorney at Law": 9, "Secret Invasion": 6, "Loki, season 2": 6,
+  "What If...?, season 2": 9, "Echo": 5, "X-Men '97, season 1": 10, "Agatha All Along": 9, "What If...?, season 3": 8,
+  "Your Friendly Neighborhood Spider-Man, season 1": 10, "Daredevil: Born Again, season 1": 9, "Ironheart": 6, "Eyes of Wakanda": 4,
+  "Marvel Zombies": 4, "Wonder Man": 8, "Daredevil: Born Again, season 2": 8, "X-Men '97, season 2": 9, "VisionQuest": 8,
+  "Agent Carter, season 1": 8, "Agent Carter, season 2": 10, "Daredevil, season 1": 13, "Jessica Jones, season 1": 13,
+  "Jessica Jones, season 2": 13, "Jessica Jones, season 3": 13, "Iron Fist, season 1": 13, "Iron Fist, season 2": 10,
+  "The Defenders": 8, "Constantine, season 1": 13, "Inhumans": 8, "The Punisher, season 1": 13, "The Punisher, season 2": 13, "Runaways, season 1": 13,
+  "Runaways, season 2": 13, "Runaways, season 3": 10, "Cloak & Dagger, season 1": 10, "Cloak & Dagger, season 2": 10,
+  "Luke Cage, season 2": 13, "Daredevil, season 3": 13, "Agents of S.H.I.E.L.D., season 6": 13, "Agents of S.H.I.E.L.D., season 7": 13
+};
+function epInfo(it) {
+  var m = /(?:eps|issues) (\d+)–(\d+)\)?$/.exec(it.id);
+  if (m) return [+m[1], +m[2]];
+  return COUNTS[it.id] ? [1, COUNTS[it.id]] : (it.n ? [1, it.n] : null);
+}
+function epKey(it, e) { return it.id + "#" + e; }
+function epDone(it, e) { return !!(done[it.id] || done[epKey(it, e)]); }
+function seen(it) {
+  var r = epInfo(it); if (!r) return done[it.id] ? 1 : 0;
+  var n = 0; for (var e = r[0]; e <= r[1]; e++) if (epDone(it, e)) n++; return n;
+}
+function total(it) { var r = epInfo(it); return r ? r[1] - r[0] + 1 : 1; }
+function wSeen(it) { return cur === "marvel" ? (isDone(it) ? 1 : 0) : seen(it); }
+function wTotal(it) { return cur === "marvel" ? 1 : total(it); }
+function isDone(it) { return seen(it) === total(it); }
+function setAll(it, on) {
+  var r = epInfo(it); delete done[it.id];
+  for (var e = r[0]; e <= r[1]; e++) { if (on) done[epKey(it, e)] = 1; else delete done[epKey(it, e)]; }
+}
+var openSet = {};
+
+function metaHtml(it, isNext, extra) {
+  return '<span class="meta"><span class="tag ' + (it.type === "f" ? "film" : "ser") + (it.cross ? " cross" : "") + '">' + (it.cross ? "Crossover" : it.comic ? "Comic" : it.special ? "Special" : it.type === "f" ? "Film" : "Series") + '</span>' +
+    (it.net ? '<span class="net">' + it.net + '</span>' : "") + (it.studio ? '<span class="net">' + it.studio + '</span>' : "") + (it.opt ? '<span class="tag opt">Optional</span>' : "") +
+    (extra || "") + (isNext ? '<span class="next">Up next</span>' : "") + '</span>';
+}
+function rowHtml(it, isNext) {
+  return '<label class="row' + (it.upcoming ? " upcoming" : "") + '">' +
+    '<input type="checkbox" data-id="' + esc(it.id) + '"' + (done[it.id] ? " checked" : "") + (it.upcoming ? " disabled" : "") + '><span class="box"></span>' +
+    '<span class="name"><span class="title">' + esc(it.id) + '</span>' + metaHtml(it, isNext) + '</span>' +
+    '<span class="date' + (it.upcoming ? " soon" : "") + '">' + fmt(it.date, it.upcoming) + '</span></label>';
+}
+function blockHtml(it, isNext) {
+  var r = epInfo(it), n = total(it), c = seen(it);
+  var state = c === n ? "full" : c ? "part" : "";
+  var h = '<details class="blk" data-id="' + esc(it.id) + '"' + (openSet[it.id] ? " open" : "") + '>' +
+    '<summary class="sum' + (state === "full" ? " all" : "") + '"><span class="sbox ' + state + '" role="button" aria-label="Mark whole season"></span>' +
+    '<span class="name"><span class="title">' + esc(it.id) + '</span>' + metaHtml(it, isNext, '<span>' + c + '/' + n + (it.comic ? ' issues' : ' eps') + '</span>') + '</span>' +
+    '<span class="date">' + fmt(it.date, false) + '<i class="chev"></i></span></summary><div class="eps"><div class="eplist">';
+  for (var e = r[0]; e <= r[1]; e++) {
+    h += '<label class="ep"><input type="checkbox" data-id="' + esc(it.id) + '" data-ep="' + e + '"' + (epDone(it, e) ? " checked" : "") +
+      '><span class="box sm"></span><span>' + (it.comic ? 'Issue ' : 'Episode ') + e + '</span></label>';
+  }
+  return h + '</div><div class="epbar"><button class="mini" data-act="all">Mark all watched</button><button class="mini" data-act="none">Clear</button></div></div></details>';
+}
+
+function render() {
+  var groups = getGroups();
+  var order = [].concat.apply([], groups.map(function (g) { return g.list; }));
+  var next = order.find(function (it) { return !isDone(it) && !it.upcoming && !(skipOpt && it.opt); });
+  var html = "";
+  groups.forEach(function (g) {
+    var all = g.list.filter(function (it) { return !(skipOpt && it.opt); });
+    var sn = all.reduce(function (a, it) { return a + wSeen(it); }, 0), tot = all.reduce(function (a, it) { return a + wTotal(it); }, 0);
+    var rows = g.list.filter(visible);
+    html += '<section><h2>' + g.name + '<small>' + sn + ' of ' + tot + '</small></h2><div class="list">';
+    if (!rows.length) html += '<div class="empty">Nothing to show here with these filters.</div>';
+    rows.forEach(function (it) {
+      var isNext = next && next.id === it.id;
+      html += epInfo(it) ? blockHtml(it, isNext) : rowHtml(it, isNext);
+    });
+    html += '</div></section>';
+  });
+  document.getElementById("main").innerHTML = html;
+  var pool = order.filter(function (it) { return !it.upcoming && !(skipOpt && it.opt); });
+  var n = pool.reduce(function (a, it) { return a + wSeen(it); }, 0), N = pool.reduce(function (a, it) { return a + wTotal(it); }, 0);
+  document.getElementById("count").textContent = n + " / " + N + (cur === "buffy" ? " watched or read" : " watched");
+  var pct = N ? Math.round(n / N * 100) : 0;
+  document.getElementById("fill").style.width = pct + "%";
+  document.getElementById("pbar").setAttribute("aria-valuenow", pct);
+}
+function keepScroll() { var y = window.scrollY; render(); window.scrollTo(0, y); }
+var main = document.getElementById("main");
+main.addEventListener("change", function (e) {
+  var id = e.target.getAttribute("data-id"); if (!id) return;
+  var it = byId[id], ep = e.target.getAttribute("data-ep");
+  if (ep) {
+    if (done[id]) { var r = epInfo(it); for (var k = r[0]; k <= r[1]; k++) done[epKey(it, k)] = 1; delete done[id]; }
+    if (e.target.checked) done[epKey(it, ep)] = 1; else delete done[epKey(it, ep)];
+  } else {
+    if (e.target.checked) done[id] = 1; else delete done[id];
+  }
+  save(); keepScroll();
+});
+main.addEventListener("click", function (e) {
+  var box = e.target.closest(".sbox");
+  var btn = e.target.closest("button[data-act]");
+  var d = e.target.closest("details"); if (!d || (!box && !btn)) return;
+  var it = byId[d.getAttribute("data-id")];
+  if (box) { e.preventDefault(); setAll(it, !isDone(it)); }
+  else setAll(it, btn.getAttribute("data-act") === "all");
+  save(); keepScroll();
+});
+main.addEventListener("toggle", function (e) {
+  var d = e.target;
+  if (d.classList && d.classList.contains("blk")) openSet[d.getAttribute("data-id")] = d.open;
+}, true);
+document.getElementById("filters").addEventListener("click", function (e) {
+  var b = e.target.closest("button"); if (!b) return;
+  if (b.id === "core") { skipOpt = !skipOpt; b.setAttribute("aria-pressed", skipOpt); }
+  else if (b.id === "legacy") { legacyOn = !legacyOn; b.setAttribute("aria-pressed", legacyOn); }
+  else {
+    filter = b.getAttribute("data-f");
+    document.querySelectorAll("[data-f]").forEach(function (c) { c.setAttribute("aria-pressed", c === b); });
+  }
+  render();
+});
+document.getElementById("views").addEventListener("click", function (e) {
+  var b = e.target.closest("button"); if (!b) return;
+  view = b.getAttribute("data-v");
+  document.querySelectorAll("[data-v]").forEach(function (c) { c.setAttribute("aria-pressed", c === b); });
+  applyList();
+  window.scrollTo(0, 0); render();
+});
+var SUB = {
+  marvel: "Movies and Disney+ shows interleaved in release order, through Avengers: Doomsday.",
+  arrow: "Arrow, The Flash, Supergirl, Legends of Tomorrow, Batwoman and Black Lightning in air-date order, with crossovers in place.",
+  buffy: "Buffy the Vampire Slayer and Angel, alternating episodes so the crossovers and shared story beats line up, then the comics.",
+  trek: "Every Star Trek series, film and short, by release date or in-universe chronology.",
+  swars: "Every Star Wars film and live-action or animated series, by release date or in-universe chronology.",
+  xmen: "The Fox X-Men films and the Deadpool and Wolverine films, in story order or by release date.",
+  dc: "The DCEU, the separate Elseworlds stories, and James Gunn's new DCU, in the order they were released.",
+  stargate: "The film, SG-1, Atlantis, Universe and the movies, with the shows that overlap alternated in blocks.",
+  bsg: "Battlestar Galactica with Razor, The Plan and the webisodes slotted in where they fit; Caprica and Blood & Chrome first and optional.",
+  dwho: "Doctor Who from 2005 on, with Torchwood and The Sarah Jane Adventures placed where they aired."
+};
+function applyList() {
+  document.getElementById("listsel").value = cur;
+  document.getElementById("sub").textContent = SUB[cur];
+  document.getElementById("views").hidden = !VIEWABLE[cur];
+  document.getElementById("legacy").hidden = !(cur === "marvel" && view === "story");
+  document.getElementById("chip-film").hidden = !FILMS[cur];
+  document.getElementById("foot-marvel").hidden = cur !== "marvel";
+  document.getElementById("foot-arrow").hidden = cur !== "arrow";
+  document.getElementById("foot-buffy").hidden = cur !== "buffy";
+  document.getElementById("foot-trek").hidden = cur !== "trek";
+  document.getElementById("foot-swars").hidden = cur !== "swars";
+  Object.keys(NEWL).forEach(function (k) { document.getElementById("foot-" + k).hidden = cur !== k; });
+  if (!FILMS[cur] && filter === "film") {
+    filter = "all";
+    document.querySelectorAll("[data-f]").forEach(function (c) { c.setAttribute("aria-pressed", c.getAttribute("data-f") === "all"); });
+  }
+}
+document.getElementById("listsel").addEventListener("change", function () {
+  cur = this.value;
+  try { localStorage.setItem("watch-lists-cur", cur); } catch (x) {}
+  try { location.hash = HASHES[cur]; } catch (x) {}
+  applyList(); window.scrollTo(0, 0); render();
+});
+try { var sv = localStorage.getItem("watch-lists-cur"); if (sv && HASHES[sv]) cur = sv; } catch (x) {}
+Object.keys(HASHES).forEach(function (k) { if (location.hash === "#" + HASHES[k]) cur = k; });
+document.getElementById("listsel").innerHTML = LISTS.map(function (l) { return '<option value="' + l[0] + '">' + l[1] + '</option>'; }).join("");
+applyList();
+render();
+</script>
+
+</body>
+</html>
