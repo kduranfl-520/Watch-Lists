@@ -112,6 +112,8 @@ details[open] > .sum .chev { transform: rotate(-135deg); vertical-align: -2px; }
 .epbar { display: flex; gap: 8px; padding: 6px 14px 0 20px; }
 .mini { font: inherit; font-size: .8rem; font-weight: 500; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; cursor: pointer; }
 @media (prefers-reduced-motion: reduce) { .bar i, .chev { transition: none; } }
+.reset { margin-top: 32px; text-align: center; }
+.reset .mini.armed { background: var(--accent); color: #fff; border-color: var(--accent); }
 </style>
 <style>
 :root { color-scheme: light; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
@@ -148,6 +150,7 @@ body { margin: 0; }
   </header>
   <p class="sub" id="sub"></p>
   <main id="main"></main>
+  <div class="reset"><button class="mini" id="resetbtn" type="button">Clear this list</button></div>
   <div class="foot" id="foot-marvel">
     <p>Tap a series to open its episodes, or tap its square to mark the whole season. Optional means you can skip it and still follow the main story. Dates are US premieres; Spider-Man titles are Sony co-productions.</p>
     <p>The Sony films (Venom, Venom: Let There Be Carnage, Morbius, Madame Web, Venom: The Last Dance and Kraven the Hunter) are optional and tagged Sony. In story order I put Venom and Let There Be Carnage right before Spider-Man: No Way Home, since that film's mid-credits scene leads into it, and Morbius right after. The other three are not connected to the MCU story, so they sit in the standalone group.</p>
@@ -480,6 +483,18 @@ document.getElementById("listsel").addEventListener("change", function () {
 try { var sv = localStorage.getItem("watch-lists-cur"); if (sv && HASHES[sv]) cur = sv; } catch (x) {}
 Object.keys(HASHES).forEach(function (k) { if (location.hash === "#" + HASHES[k]) cur = k; });
 document.getElementById("listsel").innerHTML = LISTS.map(function (l) { return '<option value="' + l[0] + '">' + l[1] + '</option>'; }).join("");
+var resetTimer = null;
+document.getElementById("resetbtn").addEventListener("click", function () {
+  var b = this;
+  if (!b.classList.contains("armed")) {
+    b.classList.add("armed"); b.textContent = "Tap again to clear every tick in this list";
+    resetTimer = setTimeout(function () { b.classList.remove("armed"); b.textContent = "Clear this list"; }, 5000);
+    return;
+  }
+  clearTimeout(resetTimer); b.classList.remove("armed"); b.textContent = "Clear this list";
+  getGroups().forEach(function (g) { g.list.forEach(function (it) { delete done[it.id]; if (epInfo(it)) setAll(it, false); }); });
+  save(); render();
+});
 applyList();
 render();
 </script>
