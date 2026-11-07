@@ -352,6 +352,7 @@ function setAll(it, on) {
   for (var e = r[0]; e <= r[1]; e++) { if (on) done[epKey(it, e)] = 1; else delete done[epKey(it, e)]; }
 }
 var openSet = {};
+try { openSet = JSON.parse(localStorage.getItem("watch-lists-open") || "{}") || {}; } catch (x) { openSet = {}; }
 
 function metaHtml(it, isNext, extra) {
   return '<span class="meta"><span class="tag ' + (it.type === "f" ? "film" : "ser") + (it.cross ? " cross" : "") + '">' + (it.cross ? "Crossover" : it.comic ? "Comic" : it.special ? "Special" : it.type === "f" ? "Film" : "Series") + '</span>' +
@@ -441,7 +442,8 @@ main.addEventListener("click", function (e) {
 });
 main.addEventListener("toggle", function (e) {
   var d = e.target;
-  if (d.classList && d.classList.contains("blk")) openSet[d.getAttribute("data-id")] = d.open;
+  if (d.classList && d.classList.contains("blk")) { var oid = d.getAttribute("data-id"); if (d.open) openSet[oid] = true; else delete openSet[oid];
+    try { localStorage.setItem("watch-lists-open", JSON.stringify(openSet)); } catch (x) {} }
 }, true);
 document.getElementById("filters").addEventListener("click", function (e) {
   var b = e.target.closest("button"); if (!b) return;
