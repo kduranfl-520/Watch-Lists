@@ -256,6 +256,7 @@ function visible(it) {
 function esc(s) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;"); }
 
 var view = "story";
+try { var vv = localStorage.getItem("watch-lists-view"); if (vv === "release" || vv === "story") view = vv; } catch (x) {}
 var legacyOn = true;
 var LEGACY = [["Agent Carter, season 1", "2015-01-06", "ABC"], ["Agent Carter, season 2", "2016-01-19", "ABC"], ["Agents of S.H.I.E.L.D., S1 eps 1–7", "2013-09-24", "ABC"], ["Agents of S.H.I.E.L.D., S1 eps 8–16", "2013-09-24", "ABC"], ["Agents of S.H.I.E.L.D., S1 eps 17–22", "2013-09-24", "ABC"], ["Daredevil, season 1", "2015-04-10", "Netflix"], ["Agents of S.H.I.E.L.D., S2 eps 1–10", "2014-09-23", "ABC"], ["Jessica Jones, season 1", "2015-11-20", "Netflix"], ["Agents of S.H.I.E.L.D., S2 eps 11–19", "2014-09-23", "ABC"], ["Agents of S.H.I.E.L.D., S2 eps 20–22", "2014-09-23", "ABC"], ["Daredevil, S2 eps 1–4", "2016-03-18", "Netflix"], ["Luke Cage, S1 eps 1–4", "2016-09-30", "Netflix"], ["Daredevil, S2 eps 5–11", "2016-03-18", "Netflix"], ["Luke Cage, S1 eps 5–8", "2016-09-30", "Netflix"], ["Daredevil, S2 eps 12–13", "2016-03-18", "Netflix"], ["Luke Cage, S1 eps 9–13", "2016-09-30", "Netflix"], ["Agents of S.H.I.E.L.D., S3 eps 1–19", "2015-09-29", "ABC"], ["Iron Fist, season 1", "2017-03-17", "Netflix"], ["Agents of S.H.I.E.L.D., S3 eps 20–22", "2015-09-29", "ABC"], ["The Defenders", "2017-08-18", "Netflix"], ["Agents of S.H.I.E.L.D., S4 eps 1–6", "2016-09-20", "ABC"], ["Agents of S.H.I.E.L.D., S4 eps 7–22", "2016-09-20", "ABC"], ["Inhumans", "2017-09-29", "ABC"], ["The Punisher, season 1", "2017-11-17", "Netflix"], ["Runaways, season 1", "2017-11-21", "Hulu"], ["Agents of S.H.I.E.L.D., S5 eps 1–10", "2017-12-01", "ABC"], ["Jessica Jones, season 2", "2018-03-08", "Netflix"], ["Agents of S.H.I.E.L.D., S5 eps 11–18", "2017-12-01", "ABC"], ["Cloak & Dagger, season 1", "2018-06-07", "Freeform"], ["Cloak & Dagger, season 2", "2019-04-04", "Freeform"], ["Luke Cage, season 2", "2018-06-22", "Netflix"], ["Iron Fist, season 2", "2018-09-07", "Netflix"], ["Daredevil, season 3", "2018-10-19", "Netflix"], ["Runaways, season 2", "2018-12-21", "Hulu"], ["The Punisher, season 2", "2019-01-18", "Netflix"], ["Jessica Jones, season 3", "2019-06-14", "Netflix"], ["Agents of S.H.I.E.L.D., S5 eps 19–22", "2017-12-01", "ABC"], ["Agents of S.H.I.E.L.D., season 6", "2019-05-10", "ABC"], ["Agents of S.H.I.E.L.D., season 7", "2020-06-03", "ABC"], ["Runaways, season 3", "2019-12-13", "Hulu"]];
 LEGACY.forEach(function (l) { items.push({ id: l[0], type: "s", date: l[1], opt: false, phase: -1, upcoming: false, net: l[2] }); });
@@ -402,6 +403,20 @@ function render() {
   document.getElementById("fill").style.width = pct + "%";
   document.getElementById("pbar").setAttribute("aria-valuenow", pct);
 }
+var scrolls = {};
+try { scrolls = JSON.parse(localStorage.getItem("watch-lists-scroll") || "{}") || {}; } catch (x) { scrolls = {}; }
+function skey() { return cur + "|" + view; }
+function putScroll(k, y) { scrolls[k] = y; try { localStorage.setItem("watch-lists-scroll", JSON.stringify(scrolls)); } catch (x) {} }
+var scrollTimer = null;
+function flushScroll() { clearTimeout(scrollTimer); putScroll(skey(), Math.round(window.scrollY)); }
+function restoreScroll() { window.scrollTo(0, scrolls[skey()] || 0); }
+try { history.scrollRestoration = "manual"; } catch (x) {}
+window.addEventListener("scroll", function () {
+  var k = skey(), y = Math.round(window.scrollY);
+  clearTimeout(scrollTimer); scrollTimer = setTimeout(function () { putScroll(k, y); }, 200);
+});
+window.addEventListener("pagehide", flushScroll);
+document.addEventListener("visibilitychange", function () { if (document.hidden) flushScroll(); });
 function keepScroll() { var y = window.scrollY; render(); window.scrollTo(0, y); }
 var main = document.getElementById("main");
 main.addEventListener("change", function (e) {
@@ -440,10 +455,12 @@ document.getElementById("filters").addEventListener("click", function (e) {
 });
 document.getElementById("views").addEventListener("click", function (e) {
   var b = e.target.closest("button"); if (!b) return;
+  flushScroll();
   view = b.getAttribute("data-v");
+  try { localStorage.setItem("watch-lists-view", view); } catch (x) {}
   document.querySelectorAll("[data-v]").forEach(function (c) { c.setAttribute("aria-pressed", c === b); });
   applyList();
-  window.scrollTo(0, 0); render();
+  render(); restoreScroll();
 });
 var SUB = {
   marvel: "Movies and Disney+ shows interleaved in release order, through Avengers: Doomsday.",
@@ -475,10 +492,11 @@ function applyList() {
   }
 }
 document.getElementById("listsel").addEventListener("change", function () {
+  flushScroll();
   cur = this.value;
   try { localStorage.setItem("watch-lists-cur", cur); } catch (x) {}
   try { location.hash = HASHES[cur]; } catch (x) {}
-  applyList(); window.scrollTo(0, 0); render();
+  applyList(); render(); restoreScroll();
 });
 try { var sv = localStorage.getItem("watch-lists-cur"); if (sv && HASHES[sv]) cur = sv; } catch (x) {}
 Object.keys(HASHES).forEach(function (k) { if (location.hash === "#" + HASHES[k]) cur = k; });
@@ -495,8 +513,11 @@ document.getElementById("resetbtn").addEventListener("click", function () {
   getGroups().forEach(function (g) { g.list.forEach(function (it) { delete done[it.id]; if (epInfo(it)) setAll(it, false); }); });
   save(); render();
 });
+document.querySelectorAll("[data-v]").forEach(function (c) { c.setAttribute("aria-pressed", c.getAttribute("data-v") === view); });
 applyList();
 render();
+restoreScroll();
+window.addEventListener("load", function () { if (window.scrollY < 5) restoreScroll(); });
 </script>
 
 </body>
