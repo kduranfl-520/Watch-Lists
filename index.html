@@ -425,7 +425,8 @@ main.addEventListener("change", function (e) {
   var it = byId[id], ep = e.target.getAttribute("data-ep");
   if (ep) {
     if (done[id]) { var r = epInfo(it); for (var k = r[0]; k <= r[1]; k++) done[epKey(it, k)] = 1; delete done[id]; }
-    if (e.target.checked) done[epKey(it, ep)] = 1; else delete done[epKey(it, ep)];
+    if (e.target.checked) { var r2 = epInfo(it); for (var j = r2[0]; j <= +ep; j++) done[epKey(it, j)] = 1; }
+    else delete done[epKey(it, ep)];
   } else {
     if (e.target.checked) done[id] = 1; else delete done[id];
   }
